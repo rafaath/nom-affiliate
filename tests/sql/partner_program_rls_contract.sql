@@ -1,0 +1,11 @@
+-- Contract test outline for Supabase/pgTAP execution after applying
+-- supabase/migrations/20260524030000_nom_partner_program.sql to an isolated database.
+--
+-- Required assertions:
+-- 1. Anonymous role cannot select private partner tables.
+-- 2. Authenticated partner A can select/update only partner A records.
+-- 3. Authenticated partner A cannot select partner B leads, deals, commissions, payouts, or disputes.
+-- 4. User present in public.partner_admins with is_active = true can review all partner records.
+-- 5. User absent from public.partner_admins cannot access admin review queues.
+-- 6. Lead ownership expiry is stored when a lead is accepted.
+-- 7. Payout batches are admin-only while payout items are partner-readable for owned items.
