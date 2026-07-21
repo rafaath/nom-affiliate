@@ -1,5 +1,5 @@
 import { isAfter } from 'date-fns';
-import { getDatabase, type SqlExecutor } from '@/lib/db/client';
+import { getDatabase, toJsonValue, type SqlExecutor } from '@/lib/db/client';
 import type { CommissionEligibilityResult } from './types';
 
 function eligible(summary: string, evidence: Record<string, unknown> = {}): CommissionEligibilityResult {
@@ -157,7 +157,7 @@ export async function refreshCommissionEligibility(commissionId: string, sql: Sq
     set
       platform_eligibility_status = ${evaluation.status},
       platform_eligibility_checked_at = now(),
-      platform_eligibility_evidence = ${JSON.stringify(evaluation.evidence)}::jsonb,
+      platform_eligibility_evidence = ${sql.json(toJsonValue(evaluation.evidence))},
       platform_eligibility_blockers = ${evaluation.blockers},
       held_reason = case
         when ${evaluation.eligible} = false then ${evaluation.blockers.join(' ')}

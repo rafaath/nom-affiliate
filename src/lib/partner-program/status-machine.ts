@@ -50,6 +50,22 @@ const commissionTransitions: Record<CommissionStatus, CommissionStatus[]> = {
   reversed: [],
 };
 
+export function legalLeadStatusTargets(from: LeadStatus): LeadStatus[] {
+  return [from, ...leadTransitions[from]];
+}
+
+export function legalDealStageTargets(from: DealStage): DealStage[] {
+  return [from, ...dealTransitions[from]];
+}
+
+export function legalSetupStatusTargets(from: SetupStatus): SetupStatus[] {
+  return [from, ...setupTransitions[from]];
+}
+
+export function legalCommissionStatusTargets(from: CommissionStatus): CommissionStatus[] {
+  return [from, ...commissionTransitions[from]];
+}
+
 export function canTransitionLead(from: LeadStatus, to: LeadStatus) {
   return leadTransitions[from].includes(to);
 }

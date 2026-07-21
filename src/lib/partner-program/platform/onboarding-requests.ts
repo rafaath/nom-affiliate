@@ -1,4 +1,4 @@
-import { getDatabase, type SqlExecutor } from '@/lib/db/client';
+import { getDatabase, toJsonValue, type SqlExecutor } from '@/lib/db/client';
 import { assertFeatureCodesExist, getActivePlatformPlan } from './catalog';
 import type { OnboardingRequestDraft } from './types';
 
@@ -155,7 +155,7 @@ export async function syncDealFeatureSelections(input: {
         ${input.branchId},
         ${plan.feature_codes.includes(feature.code) ? 'plan' : 'addon'},
         true,
-        ${JSON.stringify({ plan_id: plan.id })}::jsonb
+        ${sql.json(toJsonValue({ plan_id: plan.id }))}
       )
       on conflict do nothing
     `;
@@ -216,7 +216,7 @@ export async function createOrUpdateOnboardingRequest(input: OnboardingRequestDr
       ${input.affiliateRequestedPlanId || null},
       ${input.affiliateRequestedFeatureCodes || []},
       ${input.affiliateRequestedBranchCount || input.requestedBranchCount},
-      ${JSON.stringify(input.affiliatePackageSnapshot || {})}::jsonb,
+      ${sql.json(toJsonValue(input.affiliatePackageSnapshot || {}))},
       ${input.restaurantName},
       ${input.legalBusinessName || null},
       ${payload.owner.firstName},
@@ -234,14 +234,14 @@ export async function createOrUpdateOnboardingRequest(input: OnboardingRequestDr
       ${input.currencySymbol || '₹'},
       ${input.restaurantType || null},
       ${input.gstRegistrationType || null},
-      ${JSON.stringify({
+      ${sql.json(toJsonValue({
         source: 'affiliate_partner_program',
         affiliate_requested_plan_id: input.affiliateRequestedPlanId || null,
         affiliate_requested_feature_codes: input.affiliateRequestedFeatureCodes || [],
         affiliate_requested_branch_count: input.affiliateRequestedBranchCount || input.requestedBranchCount,
-      })}::jsonb,
-      ${JSON.stringify(payload.plannedFranchises)}::jsonb,
-      ${JSON.stringify(payload.apiPayload)}::jsonb,
+      }))},
+      ${sql.json(toJsonValue(payload.plannedFranchises))},
+      ${sql.json(toJsonValue(payload.apiPayload))},
       now()
     )
     on conflict (deal_id)
@@ -292,7 +292,7 @@ export async function createOrUpdateOnboardingRequest(input: OnboardingRequestDr
       onboarding_request_id = ${request.id},
       subscription_plan_id = ${plan.id},
       products_sold = ${approvedFeatureCodes},
-      platform_metadata = platform_metadata || ${JSON.stringify({ onboarding_request_status: request.status })}::jsonb,
+      platform_metadata = platform_metadata || ${sql.json(toJsonValue({ onboarding_request_status: request.status }))},
       updated_at = now()
     where id = ${input.dealId}
   `;

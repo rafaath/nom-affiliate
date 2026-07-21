@@ -8,9 +8,30 @@ import {
   setupStatusLabels,
 } from '@/lib/partner-program/labels';
 
-const successStatuses = new Set(['accepted', 'approved', 'paid', 'live', 'won']);
-const warningStatuses = new Set(['submitted', 'under_review', 'pending', 'scheduled_for_payout', 'follow_up_needed']);
-const destructiveStatuses = new Set(['rejected', 'failed', 'lost', 'held', 'reversed', 'duplicate']);
+const successStatuses = new Set([
+  'accepted',
+  'approved',
+  'approved_affiliate',
+  'approved_sales_partner',
+  'approved_setup_pending_training',
+  'approved_full_service',
+  'paid',
+  'live',
+  'won',
+  'active',
+]);
+const warningStatuses = new Set([
+  'submitted',
+  'under_review',
+  'submitted_for_review',
+  'pending',
+  'pending_approval',
+  'scheduled_for_payout',
+  'follow_up_needed',
+  'needs_more_information',
+  'interview_requested',
+]);
+const destructiveStatuses = new Set(['rejected', 'failed', 'lost', 'held', 'reversed', 'duplicate', 'suspended', 'inactive']);
 
 export function StatusBadge({ status }: { status: string }) {
   const label =

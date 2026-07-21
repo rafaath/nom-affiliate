@@ -12,6 +12,16 @@ import {
   reviewSetup,
   updateDealStage,
 } from '@/lib/partner-program/admin-data';
+import {
+  APPLICATION_STATUSES,
+  COMMISSION_STATUSES,
+  DEAL_STAGES,
+  DISPUTE_STATUSES,
+  LEAD_STATUSES,
+  PLATFORM_LINK_KINDS,
+  SETUP_STATUSES,
+} from '@/lib/partner-program/types';
+import { z } from 'zod';
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unexpected database error';
@@ -37,17 +47,32 @@ function formPositiveInteger(formData: FormData, key: string) {
   return Number.isFinite(value) && value > 0 ? Math.trunc(value) : undefined;
 }
 
+function formNonNegativeInteger(formData: FormData, key: string) {
+  const raw = String(formData.get(key) || '').trim();
+  if (!raw) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? Math.trunc(value) : undefined;
+}
+
+function formEnum<const T extends readonly [string, ...string[]]>(
+  formData: FormData,
+  key: string,
+  values: T
+) {
+  return z.enum(values).safeParse(formData.get(key));
+}
+
 export async function reviewApplicationAction(formData: FormData) {
   const user = await requirePartnerAdmin('/admin');
   const applicationId = String(formData.get('applicationId') || '');
   const partnerId = String(formData.get('partnerId') || '');
-  const status = String(formData.get('status') || '');
+  const status = formEnum(formData, 'status', APPLICATION_STATUSES);
   const note = String(formData.get('note') || '').trim();
 
-  if (!applicationId || !partnerId || !status) redirect('/admin/partners?error=missing-review-fields');
+  if (!applicationId || !partnerId || !status.success) redirect('/admin/partners?error=invalid-review-fields');
 
   try {
-    await reviewApplication({ actorAuthUserId: user.id, applicationId, partnerId, status, note });
+    await reviewApplication({ actorAuthUserId: user.id, applicationId, partnerId, status: status.data, note });
   } catch (error) {
     redirect(`/admin/partners?error=${encodeURIComponent(errorMessage(error))}`);
   }
@@ -61,30 +86,32 @@ export async function reviewLeadAction(formData: FormData) {
   const user = await requirePartnerAdmin('/admin');
   const leadId = String(formData.get('leadId') || '');
   const partnerId = String(formData.get('partnerId') || '');
-  const status = String(formData.get('status') || '');
+  const status = formEnum(formData, 'status', LEAD_STATUSES);
   const note = String(formData.get('note') || '').trim();
-  const platformLinkKind = formText(formData, 'platformLinkKind') as any;
+  const platformLinkKind = formEnum(formData, 'platformLinkKind', PLATFORM_LINK_KINDS);
   const existingFranchiseId = formText(formData, 'existingFranchiseId');
   const existingBranchId = formText(formData, 'existingBranchId');
   const requestedPlanId = formText(formData, 'requestedPlanId');
   const requestedFeatureCodes = formTextList(formData, 'requestedFeatureCodes');
   const requestedBranchCount = formPositiveInteger(formData, 'requestedBranchCount');
+  const ownerEmail = formText(formData, 'ownerEmail');
 
-  if (!leadId || !partnerId || !status) redirect('/admin/leads?error=missing-lead-review-fields');
+  if (!leadId || !partnerId || !status.success) redirect('/admin/leads?error=invalid-lead-review-fields');
 
   try {
     await reviewLead({
       actorAuthUserId: user.id,
       leadId,
       partnerId,
-      status,
+      status: status.data,
       note,
-      platformLinkKind,
+      platformLinkKind: platformLinkKind.success ? platformLinkKind.data : undefined,
       existingFranchiseId,
       existingBranchId,
       requestedPlanId,
       requestedFeatureCodes,
       requestedBranchCount,
+      ownerEmail,
     });
   } catch (error) {
     redirect(`/admin/leads?error=${encodeURIComponent(errorMessage(error))}`);
@@ -98,20 +125,20 @@ export async function reviewLeadAction(formData: FormData) {
 export async function updateDealStageAction(formData: FormData) {
   const user = await requirePartnerAdmin('/admin');
   const dealId = String(formData.get('dealId') || '');
-  const stage = String(formData.get('stage') || '');
+  const stage = formEnum(formData, 'stage', DEAL_STAGES);
   const note = String(formData.get('note') || '').trim();
-  const expectedCommissionCents = Number(formData.get('expectedCommissionCents') || 0);
+  const expectedCommissionCents = formNonNegativeInteger(formData, 'expectedCommissionCents');
   const requestedPlanId = formText(formData, 'requestedPlanId');
   const requestedFeatureCodes = formTextList(formData, 'requestedFeatureCodes');
   const requestedBranchCount = formPositiveInteger(formData, 'requestedBranchCount');
 
-  if (!dealId || !stage) redirect('/admin/deals?error=missing-deal-fields');
+  if (!dealId || !stage.success) redirect('/admin/deals?error=invalid-deal-fields');
 
   try {
     await updateDealStage({
       actorAuthUserId: user.id,
       dealId,
-      stage,
+      stage: stage.data,
       note,
       expectedCommissionCents,
       requestedPlanId,
@@ -130,13 +157,13 @@ export async function updateDealStageAction(formData: FormData) {
 export async function reviewSetupAction(formData: FormData) {
   const user = await requirePartnerAdmin('/admin');
   const checklistId = String(formData.get('checklistId') || '');
-  const status = String(formData.get('status') || '');
+  const status = formEnum(formData, 'status', SETUP_STATUSES);
   const note = String(formData.get('note') || '').trim();
 
-  if (!checklistId || !status) redirect('/admin/setup?error=missing-setup-fields');
+  if (!checklistId || !status.success) redirect('/admin/setup?error=invalid-setup-fields');
 
   try {
-    await reviewSetup({ actorAuthUserId: user.id, checklistId, status, note });
+    await reviewSetup({ actorAuthUserId: user.id, checklistId, status: status.data, note });
   } catch (error) {
     redirect(`/admin/setup?error=${encodeURIComponent(errorMessage(error))}`);
   }
@@ -148,14 +175,14 @@ export async function reviewSetupAction(formData: FormData) {
 export async function reviewCommissionAction(formData: FormData) {
   const user = await requirePartnerAdmin('/admin');
   const commissionId = String(formData.get('commissionId') || '');
-  const status = String(formData.get('status') || '');
-  const amountCents = Number(formData.get('amountCents') || 0);
+  const status = formEnum(formData, 'status', COMMISSION_STATUSES);
+  const amountCents = formNonNegativeInteger(formData, 'amountCents');
   const note = String(formData.get('note') || '').trim();
 
-  if (!commissionId || !status) redirect('/admin/commissions?error=missing-commission-fields');
+  if (!commissionId || !status.success) redirect('/admin/commissions?error=invalid-commission-fields');
 
   try {
-    await reviewCommission({ actorAuthUserId: user.id, commissionId, status, amountCents, note });
+    await reviewCommission({ actorAuthUserId: user.id, commissionId, status: status.data, amountCents, note });
   } catch (error) {
     redirect(`/admin/commissions?error=${encodeURIComponent(errorMessage(error))}`);
   }
@@ -181,13 +208,13 @@ export async function createPayoutBatchAction(formData: FormData) {
 export async function resolveDisputeAction(formData: FormData) {
   const user = await requirePartnerAdmin('/admin');
   const disputeId = String(formData.get('disputeId') || '');
-  const status = String(formData.get('status') || '');
+  const status = formEnum(formData, 'status', DISPUTE_STATUSES);
   const decision = String(formData.get('decision') || '').trim();
 
-  if (!disputeId || !status || !decision) redirect('/admin/disputes?error=missing-dispute-fields');
+  if (!disputeId || !status.success || !decision) redirect('/admin/disputes?error=invalid-dispute-fields');
 
   try {
-    await resolveDispute({ actorAuthUserId: user.id, disputeId, status, decision });
+    await resolveDispute({ actorAuthUserId: user.id, disputeId, status: status.data, decision });
   } catch (error) {
     redirect(`/admin/disputes?error=${encodeURIComponent(errorMessage(error))}`);
   }

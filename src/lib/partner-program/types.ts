@@ -28,6 +28,13 @@ export const APPLICATION_STATUSES = [
   'interview_requested',
 ] as const;
 
+export const LEAD_ENABLED_APPLICATION_STATUSES = [
+  'approved_affiliate',
+  'approved_sales_partner',
+  'approved_setup_pending_training',
+  'approved_full_service',
+] as const satisfies readonly ApplicationStatus[];
+
 export const LEAD_STATUSES = [
   'submitted',
   'under_review',
@@ -181,6 +188,8 @@ export type PartnerProfile = {
   certification_status: string;
   quality_score: number;
   referral_code: string;
+  is_suspended: boolean;
+  suspended_reason: string | null;
   created_at: string;
 };
 
@@ -193,7 +202,7 @@ export type PartnerLead = {
   email: string | null;
   city: string;
   locality: string;
-  restaurant_type: string;
+  restaurant_type: string | null;
   legal_business_name?: string | null;
   branch_address?: string | null;
   state?: string | null;

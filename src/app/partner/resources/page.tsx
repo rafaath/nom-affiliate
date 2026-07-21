@@ -1,4 +1,5 @@
 import { ConfigRequired } from '@/components/program/config-required';
+import { PageHeader } from '@/components/program/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { defaultPartnerResources } from '@/lib/partner-program/resources';
 import { requireUser } from '@/lib/supabase/auth';
@@ -8,6 +9,8 @@ export default async function PartnerResourcesPage() {
   try {
     await requireUser('/partner/resources');
     return (
+      <div>
+      <PageHeader eyebrow="Partner portal" title="Resources" description="Use current Nom product, pitch, implementation, and conduct guidance." />
       <div className="grid gap-4 md:grid-cols-2">
         {defaultPartnerResources.map((resource) => (
           <Card key={resource.title}>
@@ -20,6 +23,7 @@ export default async function PartnerResourcesPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
       </div>
     );
   } catch (error) {

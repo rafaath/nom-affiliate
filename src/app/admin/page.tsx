@@ -1,5 +1,6 @@
 import { ConfigRequired } from '@/components/program/config-required';
 import { MetricCard } from '@/components/program/metric-card';
+import { PageHeader } from '@/components/program/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getAdminDashboard } from '@/lib/partner-program/data';
 import { formatCurrency } from '@/lib/partner-program/format';
@@ -19,6 +20,7 @@ export default async function AdminPage() {
 
     return (
       <div className="grid gap-8">
+        <PageHeader eyebrow="Partner admin" title="Program overview" description="Monitor approval queues, platform handoffs, commissions, and payout readiness." />
         <section className="grid gap-4 md:grid-cols-4">
           <MetricCard label="Partner signups" value={dashboard.partners.length} helper="All partner profiles" />
           <MetricCard label="Leads submitted" value={dashboard.leads.length} helper="Partner-driven prospects" />

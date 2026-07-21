@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { completeTrainingStepAction } from '@/app/actions/partner';
 import { ConfigRequired } from '@/components/program/config-required';
+import { ApprovalStateNotice } from '@/components/program/approval-state-notice';
 import { EmptyState } from '@/components/program/empty-state';
 import { MetricCard } from '@/components/program/metric-card';
+import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +13,7 @@ import { isSupabaseConfigError } from '@/lib/supabase/env';
 import { formatCurrency } from '@/lib/partner-program/format';
 import { getPartnerDashboard, summarizeEarnings } from '@/lib/partner-program/data';
 import { partnerTierLabels } from '@/lib/partner-program/labels';
+import { evaluatePartnerLeadAccess } from '@/lib/partner-program/lead-access';
 
 export default async function PartnerDashboardPage() {
   try {
@@ -30,13 +32,35 @@ export default async function PartnerDashboardPage() {
     }
 
     const earnings = summarizeEarnings(dashboard.commissions);
-    const completed = dashboard.trainingProgress.filter((item) => item.status === 'completed').length;
-    const progress = dashboard.trainingProgress.length
-      ? Math.round((completed / dashboard.trainingProgress.length) * 100)
-      : 0;
+    const leadAccess = evaluatePartnerLeadAccess(dashboard.profile);
+    const gettingStartedSteps = [
+      {
+        label: 'Partner profile created',
+        complete: true,
+        href: '/partner',
+        actionLabel: 'View dashboard',
+      },
+      {
+        label: leadAccess.allowed ? 'Submit your first restaurant lead' : 'Wait for Nom approval',
+        complete: leadAccess.allowed,
+        href: leadAccess.allowed ? '/partner/leads' : '/partner',
+        actionLabel: leadAccess.allowed ? 'Submit a lead' : 'View approval state',
+      },
+      {
+        label: 'Add payout details',
+        complete: dashboard.payoutMethods.length > 0,
+        href: '/partner/payouts',
+        actionLabel: 'Add payout details',
+      },
+    ];
+    const completedSteps = gettingStartedSteps.filter((step) => step.complete).length;
+    const gettingStartedProgress = Math.round((completedSteps / gettingStartedSteps.length) * 100);
+    const nextStep = gettingStartedSteps.find((step) => !step.complete);
 
     return (
       <div className="grid gap-8">
+        <PageHeader eyebrow="Partner portal" title={`Welcome, ${dashboard.profile.full_name}`} description="Track application access, restaurant opportunities, eligible commissions, and payout progress." />
+        {!leadAccess.allowed ? <ApprovalStateNotice access={leadAccess} /> : null}
         <section className="grid gap-4 md:grid-cols-4">
           <MetricCard label="Estimated" value={formatCurrency(earnings.estimated)} helper="Future commission" />
           <MetricCard label="Pending" value={formatCurrency(earnings.pending)} helper="Under validation" />
@@ -48,13 +72,16 @@ export default async function PartnerDashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>What to do next</CardTitle>
-              <CardDescription>Keep the partner engine moving.</CardDescription>
+              <CardDescription>
+                {nextStep ? nextStep.label : 'You’re ready to submit and track restaurant opportunities.'}
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3 sm:grid-cols-2">
-              <Button asChild><Link href="/partner/leads">Register restaurant lead</Link></Button>
+              {leadAccess.allowed ? <Button asChild><Link href={nextStep?.href ?? '/partner/leads'}>{nextStep?.actionLabel ?? 'Register restaurant lead'}</Link></Button> : null}
               <Button variant="outline" asChild><Link href="/partner/resources">Open sales kit</Link></Button>
-              <Button variant="outline" asChild><Link href="/partner/payouts">Add payout details</Link></Button>
-              <Button variant="outline" asChild><Link href="/partner/setup">Review setup checklist</Link></Button>
+              {dashboard.setupChecklists.length > 0 ? (
+                <Button variant="outline" asChild><Link href="/partner/setup">View restaurant setup</Link></Button>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -71,13 +98,6 @@ export default async function PartnerDashboardPage() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Referral code</span>
                 <code className="rounded bg-muted px-2 py-1 text-sm">{dashboard.profile.referral_code}</code>
-              </div>
-              <div>
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <span>Onboarding</span>
-                  <span>{progress}%</span>
-                </div>
-                <Progress value={progress} />
               </div>
             </CardContent>
           </Card>
@@ -107,8 +127,8 @@ export default async function PartnerDashboardPage() {
                 <EmptyState
                   title="No deals yet"
                   description="Accepted leads become tracked opportunities here."
-                  actionHref="/partner/leads"
-                  actionLabel="Submit first lead"
+                  actionHref={leadAccess.allowed ? '/partner/leads' : undefined}
+                  actionLabel={leadAccess.allowed ? 'Submit first lead' : undefined}
                 />
               ) : null}
             </CardContent>
@@ -116,22 +136,17 @@ export default async function PartnerDashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Onboarding checklist</CardTitle>
-              <CardDescription>Complete the path to your first commission.</CardDescription>
+              <CardTitle>Getting started</CardTitle>
+              <CardDescription>{completedSteps} of {gettingStartedSteps.length} account steps complete.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
-              {dashboard.trainingProgress.map((item) => (
-                <div key={item.module_key} className="flex items-center justify-between rounded-lg border p-3">
-                  <div>
-                    <div className="font-medium capitalize">{String(item.module_key).replaceAll('_', ' ')}</div>
-                    <StatusBadge status={item.status} />
-                  </div>
-                  {item.status !== 'completed' ? (
-                    <form action={completeTrainingStepAction}>
-                      <input type="hidden" name="moduleKey" value={item.module_key} />
-                      <Button size="sm" variant="outline" type="submit">Mark done</Button>
-                    </form>
-                  ) : null}
+              <Progress value={gettingStartedProgress} />
+              {gettingStartedSteps.map((step) => (
+                <div key={step.label} className="flex items-center justify-between rounded-lg border p-3">
+                  <span className="font-medium">{step.label}</span>
+                  <span className={step.complete ? 'text-sm font-medium text-primary' : 'text-sm text-muted-foreground'}>
+                    {step.complete ? 'Done' : 'To do'}
+                  </span>
                 </div>
               ))}
             </CardContent>

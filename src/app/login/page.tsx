@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { signInAction } from '@/app/actions/auth';
 import { ErrorBanner } from '@/components/program/error-banner';
 import { MarketingHeader } from '@/components/shell/marketing-header';
+import { MarketingFooter } from '@/components/shell/marketing-footer';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,12 +15,17 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-paper">
       <MarketingHeader />
-      <main className="mx-auto flex max-w-lg flex-col px-6 py-16">
-        <Card>
+      <main className="marketing-container grid min-h-[calc(100vh-4.75rem)] items-center gap-10 py-12 lg:grid-cols-2 lg:py-20">
+        <section>
+          <p className="marketing-eyebrow text-success">Partner access</p>
+          <h1 className="marketing-title mt-6 max-w-[9ch]">Pick up where your application left off.</h1>
+          <p className="mt-6 max-w-lg leading-8 text-ink-body">Log in to view your review state, existing restaurant history, deals, setup work, commissions, and payouts.</p>
+        </section>
+        <Card className="w-full max-w-xl justify-self-end">
           <CardHeader>
-            <CardTitle>Partner login</CardTitle>
+            <CardTitle className="text-3xl">Partner login</CardTitle>
             <CardDescription>
               New partner? <Link href="/apply" className="text-primary underline">Apply here</Link>.
             </CardDescription>
@@ -41,6 +47,7 @@ export default async function LoginPage({
           </CardContent>
         </Card>
       </main>
+      <MarketingFooter />
     </div>
   );
 }

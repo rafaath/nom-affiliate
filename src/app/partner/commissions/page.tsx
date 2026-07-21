@@ -1,5 +1,6 @@
 import { ConfigRequired } from '@/components/program/config-required';
 import { EmptyState } from '@/components/program/empty-state';
+import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getPartnerDashboard } from '@/lib/partner-program/data';
@@ -13,6 +14,8 @@ export default async function PartnerCommissionsPage() {
     const dashboard = await getPartnerDashboard(user.id, user.email);
 
     return (
+      <div>
+      <PageHeader eyebrow="Partner portal" title="Commissions" description="Follow every eligible earning record from estimate through payout or final decision." />
       <Card>
         <CardHeader>
           <CardTitle>Commission tracking</CardTitle>
@@ -44,6 +47,7 @@ export default async function PartnerCommissionsPage() {
           ) : null}
         </CardContent>
       </Card>
+      </div>
     );
   } catch (error) {
     if (isSupabaseConfigError(error)) return <ConfigRequired message={error.message} />;

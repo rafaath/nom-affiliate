@@ -3,6 +3,7 @@ import {
   assertPartnerPlatformSchemaReady,
   assertPartnerSchemaReady,
   getDatabase,
+  toJsonValue,
   toPartnerDatabaseError,
   type SqlExecutor,
 } from '@/lib/db/client';
@@ -11,6 +12,7 @@ import { buildRequestedPackageSnapshot, type PackageCommissionRule } from './pla
 import { reconcileLeadAgainstPlatform, persistLeadReconciliation } from './platform/reconciliation';
 import { createReferralCode } from './referral';
 import { defaultPartnerResources } from './resources';
+import { assertPartnerLeadAccess, evaluatePartnerLeadAccess, type LeadAccessResult } from './lead-access';
 import type { PartnerLead, PartnerProfile } from './types';
 
 export type PartnerDashboard = {
@@ -21,7 +23,6 @@ export type PartnerDashboard = {
   setupChecklists: any[];
   payoutMethods: any[];
   notifications: any[];
-  trainingProgress: any[];
 };
 
 export type PartnerSalesCatalog = {
@@ -58,9 +59,14 @@ export type PartnerApplicationInput = {
   canHelpSetup: boolean;
   applicantKind: string;
   businessName?: string;
+  linkedinProfileUrl?: string;
+  resumeDriveUrl?: string;
   background: string;
   preferredLanguage: string;
   heardFrom: string;
+  programTermsVersion: string | null;
+  programTermsAcceptedAt: string | null;
+  programContactConsentAt: string | null;
 };
 
 export type PartnerPayoutMethodInput = {
@@ -76,21 +82,21 @@ export type PartnerPayoutMethodInput = {
 
 export type PartnerLeadInput = {
   restaurant_name: string;
-  legal_business_name: string;
+  legal_business_name?: string | null;
   owner_name: string;
   phone: string;
-  email: string;
+  email?: string | null;
   city: string;
   locality: string;
-  branch_address: string;
-  state: string;
+  branch_address?: string | null;
+  state?: string | null;
   country: string;
   postal_code?: string | null;
   timezone: string;
   gst_registration_type?: string | null;
-  restaurant_type: string;
+  restaurant_type?: string | null;
   outlet_count: number;
-  requested_plan_id: string;
+  requested_plan_id?: string | null;
   requested_feature_codes: string[];
   requested_branch_count: number;
   affiliate_reported_platform_link_kind?: string | null;
@@ -104,7 +110,7 @@ export type PartnerLeadInput = {
   notes?: string | null;
 };
 
-type PendingPartnerApplicationRow = {
+export type PendingPartnerApplicationRow = {
   full_name: string;
   phone: string;
   email: string;
@@ -117,9 +123,14 @@ type PendingPartnerApplicationRow = {
   can_help_setup: boolean;
   applicant_kind: string;
   business_name: string | null;
+  linkedin_profile_url: string | null;
+  resume_drive_url: string | null;
   background: string;
   preferred_language: string;
   heard_from: string;
+  program_terms_version: string | null;
+  program_terms_accepted_at: string | null;
+  program_contact_consent_at: string | null;
 };
 
 function maybeSingle<T>(value: T | T[] | null): T | null {
@@ -139,6 +150,18 @@ async function getPartnerProfileByAuthUserWithClient(sql: SqlExecutor, authUserI
     from public.partner_profiles
     where auth_user_id = ${authUserId}
     limit 1
+  `;
+
+  return (rows[0] as PartnerProfile | undefined) ?? null;
+}
+
+async function getPartnerProfileForUpdate(sql: SqlExecutor, authUserId: string) {
+  const rows = await sql`
+    select *
+    from public.partner_profiles
+    where auth_user_id = ${authUserId}
+    limit 1
+    for update
   `;
 
   return (rows[0] as PartnerProfile | undefined) ?? null;
@@ -186,16 +209,26 @@ export async function getPartnerSalesCatalog(authUserId: string): Promise<Partne
     await assertPartnerPlatformSchemaReady();
     const sql = getDatabase();
     const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
-    if (!profile) throw new Error('Create a partner profile before submitting restaurant leads.');
+    const eligibleProfile = assertPartnerLeadAccess(profile);
     const [platformCatalog, commissionRules] = await Promise.all([
       getPlatformCatalog(sql),
-      getCommissionPreviewRules(sql, profile.partner_type),
+      getCommissionPreviewRules(sql, eligibleProfile.partner_type),
     ]);
 
     return {
       platformCatalog,
       commissionRules: [...commissionRules],
     };
+  } catch (error) {
+    throw toPartnerDatabaseError(error);
+  }
+}
+
+export async function getPartnerLeadAccess(authUserId: string): Promise<LeadAccessResult> {
+  try {
+    await assertPartnerSchemaReady();
+    const profile = await getPartnerProfileByAuthUserWithClient(getDatabase(), authUserId);
+    return evaluatePartnerLeadAccess(profile);
   } catch (error) {
     throw toPartnerDatabaseError(error);
   }
@@ -221,7 +254,6 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
         setupChecklists: [],
         payoutMethods: [],
         notifications: [],
-        trainingProgress: [],
       };
     }
 
@@ -287,10 +319,14 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
     const setupChecklists = await sql`
       select
         sc.*,
-        case when d.id is null then null else json_build_object('stage', d.stage) end as partner_deals,
+        case
+          when d.id is null then null
+          else json_build_object('stage', d.stage, 'restaurant_name', l.restaurant_name)
+        end as partner_deals,
         coalesce(tasks.partner_setup_tasks, '[]'::json) as partner_setup_tasks
       from public.partner_setup_checklists sc
       left join public.partner_deals d on d.id = sc.deal_id
+      left join public.partner_leads l on l.id = d.lead_id
       left join lateral (
         select json_agg(t order by t.sort_order asc, t.created_at asc) as partner_setup_tasks
         from public.partner_setup_tasks t
@@ -314,13 +350,6 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
       order by created_at desc
       limit 30
     `;
-    const trainingProgress = await sql`
-      select *
-      from public.partner_training_progress
-      where partner_id = ${profile.id}
-      order by module_key asc
-    `;
-
     return {
       profile,
       leads: [...leads],
@@ -329,7 +358,6 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
       setupChecklists: [...setupChecklists],
       payoutMethods: [...payoutMethods],
       notifications: [...notifications],
-      trainingProgress: [...trainingProgress],
     };
   } catch (error) {
     throw toPartnerDatabaseError(error);
@@ -517,39 +545,7 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
   }
 }
 
-async function ensureDefaultTrainingProgressWithClient(sql: SqlExecutor, partnerId: string) {
-  const modules = [
-    'profile',
-    'what_is_nom',
-    'ideal_restaurant_profile',
-    'commission_rules',
-    'referral_link',
-    'submit_lead',
-    'pitch_material',
-    'first_lead',
-    'setup_training',
-  ];
-
-  for (const moduleKey of modules) {
-    await sql`
-      insert into public.partner_training_progress (partner_id, module_key, status, completed_at, updated_at)
-      values (
-        ${partnerId},
-        ${moduleKey},
-        ${moduleKey === 'profile' ? 'completed' : 'not_started'},
-        ${moduleKey === 'profile' ? new Date() : null},
-        now()
-      )
-      on conflict (partner_id, module_key)
-      do update set
-        status = excluded.status,
-        completed_at = excluded.completed_at,
-        updated_at = now()
-    `;
-  }
-}
-
-function pendingRowToApplicationInput(row: PendingPartnerApplicationRow): PartnerApplicationInput {
+export function pendingRowToApplicationInput(row: PendingPartnerApplicationRow): PartnerApplicationInput {
   return {
     fullName: row.full_name,
     phone: row.phone,
@@ -563,9 +559,14 @@ function pendingRowToApplicationInput(row: PendingPartnerApplicationRow): Partne
     canHelpSetup: row.can_help_setup,
     applicantKind: row.applicant_kind,
     businessName: row.business_name ?? undefined,
+    linkedinProfileUrl: row.linkedin_profile_url ?? undefined,
+    resumeDriveUrl: row.resume_drive_url ?? undefined,
     background: row.background,
     preferredLanguage: row.preferred_language,
     heardFrom: row.heard_from,
+    programTermsVersion: row.program_terms_version,
+    programTermsAcceptedAt: row.program_terms_accepted_at,
+    programContactConsentAt: row.program_contact_consent_at,
   };
 }
 
@@ -588,9 +589,14 @@ export async function savePendingPartnerApplication(input: PartnerApplicationInp
       can_help_setup,
       applicant_kind,
       business_name,
+      linkedin_profile_url,
+      resume_drive_url,
       background,
       preferred_language,
       heard_from,
+      program_terms_version,
+      program_terms_accepted_at,
+      program_contact_consent_at,
       status,
       updated_at
     )
@@ -608,9 +614,14 @@ export async function savePendingPartnerApplication(input: PartnerApplicationInp
       ${input.canHelpSetup},
       ${input.applicantKind},
       ${input.businessName || null},
+      ${input.linkedinProfileUrl || null},
+      ${input.resumeDriveUrl || null},
       ${input.background},
       ${input.preferredLanguage},
       ${input.heardFrom},
+      ${input.programTermsVersion},
+      ${input.programTermsAcceptedAt},
+      ${input.programContactConsentAt},
       'awaiting_email_confirmation',
       now()
     )
@@ -628,9 +639,14 @@ export async function savePendingPartnerApplication(input: PartnerApplicationInp
       can_help_setup = excluded.can_help_setup,
       applicant_kind = excluded.applicant_kind,
       business_name = excluded.business_name,
+      linkedin_profile_url = excluded.linkedin_profile_url,
+      resume_drive_url = excluded.resume_drive_url,
       background = excluded.background,
       preferred_language = excluded.preferred_language,
       heard_from = excluded.heard_from,
+      program_terms_version = excluded.program_terms_version,
+      program_terms_accepted_at = excluded.program_terms_accepted_at,
+      program_contact_consent_at = excluded.program_contact_consent_at,
       status = 'awaiting_email_confirmation',
       auth_user_id = null,
       claimed_at = null,
@@ -674,8 +690,11 @@ export async function upsertPartnerApplication(authUserId: string, input: Partne
   const sql = getDatabase();
 
   return sql.begin(async (tx) => {
-    const existingProfile = await getPartnerProfileByAuthUserWithClient(tx, authUserId);
-    const referralCode = existingProfile?.referral_code ?? createReferralCode(input.fullName, input.city);
+    const existingProfile = await getPartnerProfileForUpdate(tx, authUserId);
+    if (existingProfile) {
+      throw new Error('A partner application already exists for this account. Open the partner portal to view its status.');
+    }
+    const referralCode = createReferralCode(input.fullName, input.city);
 
     const profileRows = await tx`
       insert into public.partner_profiles (
@@ -706,19 +725,6 @@ export async function upsertPartnerApplication(authUserId: string, input: Partne
         ${referralCode},
         now()
       )
-      on conflict (auth_user_id)
-      do update set
-        full_name = excluded.full_name,
-        phone = excluded.phone,
-        email = excluded.email,
-        city = excluded.city,
-        locality_areas = excluded.locality_areas,
-        partner_type = excluded.partner_type,
-        tier = excluded.tier,
-        application_status = excluded.application_status,
-        certification_status = excluded.certification_status,
-        referral_code = excluded.referral_code,
-        updated_at = now()
       returning *
     `;
     const profile = firstRow(profileRows as unknown as PartnerProfile[], 'Failed to save partner profile.');
@@ -749,9 +755,14 @@ export async function upsertPartnerApplication(authUserId: string, input: Partne
         can_help_setup,
         applicant_kind,
         business_name,
+        linkedin_profile_url,
+        resume_drive_url,
         background,
         preferred_language,
         heard_from,
+        program_terms_version,
+        program_terms_accepted_at,
+        program_contact_consent_at,
         status,
         submitted_at,
         updated_at
@@ -771,34 +782,18 @@ export async function upsertPartnerApplication(authUserId: string, input: Partne
         ${input.canHelpSetup},
         ${input.applicantKind},
         ${input.businessName || null},
+        ${input.linkedinProfileUrl || null},
+        ${input.resumeDriveUrl || null},
         ${input.background},
         ${input.preferredLanguage},
         ${input.heardFrom},
+        ${input.programTermsVersion},
+        ${input.programTermsAcceptedAt},
+        ${input.programContactConsentAt},
         'submitted',
         now(),
         now()
       )
-      on conflict (partner_id)
-      do update set
-        auth_user_id = excluded.auth_user_id,
-        full_name = excluded.full_name,
-        phone = excluded.phone,
-        email = excluded.email,
-        city = excluded.city,
-        locality_areas = excluded.locality_areas,
-        requested_partner_type = excluded.requested_partner_type,
-        restaurant_experience = excluded.restaurant_experience,
-        restaurant_network_size = excluded.restaurant_network_size,
-        can_visit_restaurants = excluded.can_visit_restaurants,
-        can_help_setup = excluded.can_help_setup,
-        applicant_kind = excluded.applicant_kind,
-        business_name = excluded.business_name,
-        background = excluded.background,
-        preferred_language = excluded.preferred_language,
-        heard_from = excluded.heard_from,
-        status = excluded.status,
-        submitted_at = excluded.submitted_at,
-        updated_at = now()
     `;
 
     await tx`
@@ -811,14 +806,8 @@ export async function upsertPartnerApplication(authUserId: string, input: Partne
       where email_normalized = ${input.email.toLowerCase()}
     `;
 
-    await ensureDefaultTrainingProgressWithClient(tx, profile.id);
     return profile;
   });
-}
-
-export async function ensureDefaultTrainingProgress(partnerId: string) {
-  await assertPartnerSchemaReady();
-  await ensureDefaultTrainingProgressWithClient(getDatabase(), partnerId);
 }
 
 export async function createPartnerLead(
@@ -829,20 +818,25 @@ export async function createPartnerLead(
   const sql = getDatabase();
 
   return sql.begin(async (tx) => {
-    const profile = await getPartnerProfileByAuthUserWithClient(tx, authUserId);
-    if (!profile) throw new Error('Create a partner profile before submitting a lead.');
-    const plan = await getActivePlatformPlan(input.requested_plan_id, tx);
-    const requestedFeatureCodes = await assertFeatureCodesExist(input.requested_feature_codes, tx);
-    const platformCatalog = await getPlatformCatalog(tx);
-    const commissionRules = await getCommissionPreviewRules(tx, profile.partner_type);
-    const packageSnapshot = buildRequestedPackageSnapshot({
-      plan,
-      selectedFeatureCodes: requestedFeatureCodes,
-      requestedBranchCount: input.requested_branch_count,
-      features: platformCatalog.features,
-      commissionRules: [...commissionRules],
-      partnerType: profile.partner_type,
-    });
+    const profile = assertPartnerLeadAccess(await getPartnerProfileForUpdate(tx, authUserId));
+    let packageSnapshot: ReturnType<typeof buildRequestedPackageSnapshot> | null = null;
+
+    if (input.requested_plan_id) {
+      const plan = await getActivePlatformPlan(input.requested_plan_id, tx);
+      const requestedFeatureCodes = await assertFeatureCodesExist(input.requested_feature_codes, tx);
+      const platformCatalog = await getPlatformCatalog(tx);
+      const commissionRules = await getCommissionPreviewRules(tx, profile.partner_type);
+      packageSnapshot = buildRequestedPackageSnapshot({
+        plan,
+        selectedFeatureCodes: requestedFeatureCodes,
+        requestedBranchCount: input.requested_branch_count,
+        features: platformCatalog.features,
+        commissionRules: [...commissionRules],
+        partnerType: profile.partner_type,
+      });
+    }
+
+    const requestedBranchCount = packageSnapshot?.branch_count ?? input.outlet_count;
 
     const leadRows = await tx`
       insert into public.partner_leads (
@@ -884,36 +878,36 @@ export async function createPartnerLead(
       values (
         ${profile.id},
         ${input.restaurant_name},
-        ${input.legal_business_name},
+        ${input.legal_business_name || null},
         ${input.owner_name},
         ${input.phone},
-        ${input.email},
+        ${input.email || null},
         ${input.city},
         ${input.locality},
-        ${input.branch_address},
-        ${input.state},
+        ${input.branch_address || null},
+        ${input.state || null},
         ${input.country || 'India'},
         ${input.postal_code || null},
         ${input.timezone || 'Asia/Kolkata'},
         ${input.gst_registration_type || null},
-        ${input.restaurant_type},
+        ${input.restaurant_type || null},
         ${input.outlet_count},
-        ${plan.id},
-        ${packageSnapshot.feature_codes},
-        ${packageSnapshot.branch_count},
-        ${packageSnapshot.summary},
-        ${packageSnapshot.monthly_revenue_cents},
-        ${packageSnapshot.commission_preview_cents},
-        ${JSON.stringify(packageSnapshot.commission_preview)}::jsonb,
+        ${packageSnapshot?.plan_id || null},
+        ${packageSnapshot?.feature_codes || []},
+        ${requestedBranchCount},
+        ${packageSnapshot?.summary || null},
+        ${packageSnapshot?.monthly_revenue_cents || 0},
+        ${packageSnapshot?.commission_preview_cents || 0},
+        ${tx.json(toJsonValue(packageSnapshot?.commission_preview || {}))},
         ${input.affiliate_reported_platform_link_kind || null},
         ${input.affiliate_reported_existing_customer_notes || null},
-        ${JSON.stringify({
+        ${tx.json(toJsonValue({
           source: 'affiliate_partner_portal',
           requested_package: packageSnapshot,
           affiliate_reported_platform_link_kind: input.affiliate_reported_platform_link_kind || null,
           affiliate_reported_existing_customer_notes: input.affiliate_reported_existing_customer_notes || null,
           branch_handoff_complete: Boolean(input.branch_address && input.state && input.country),
-        })}::jsonb,
+        }))},
         ${input.current_system || null},
         ${input.products_interested},
         ${input.pain_points},
@@ -957,7 +951,7 @@ export async function createPartnerLead(
         'lead_submitted',
         'submitted',
         'Partner submitted restaurant lead.',
-        ${JSON.stringify({ platform_reconciliation: reconciliation, requested_package: packageSnapshot })}::jsonb
+        ${tx.json(toJsonValue({ platform_reconciliation: reconciliation, requested_package: packageSnapshot }))}
       )
     `;
 
@@ -968,8 +962,7 @@ export async function createPartnerLead(
 export async function savePartnerPayoutMethod(authUserId: string, input: PartnerPayoutMethodInput) {
   await assertPartnerSchemaReady();
   const sql = getDatabase();
-  const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
-  if (!profile) throw new Error('Create a partner profile before saving payout details.');
+  const profile = assertPartnerLeadAccess(await getPartnerProfileByAuthUserWithClient(sql, authUserId));
 
   await sql`
     insert into public.partner_payout_methods (
@@ -996,23 +989,6 @@ export async function savePartnerPayoutMethod(authUserId: string, input: Partner
       ${input.gstNumber || null},
       'pending_approval'
     )
-  `;
-}
-
-export async function completeTrainingStep(authUserId: string, moduleKey: string) {
-  await assertPartnerSchemaReady();
-  const sql = getDatabase();
-  const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
-  if (!profile) throw new Error('Create a partner profile before updating training progress.');
-
-  await sql`
-    insert into public.partner_training_progress (partner_id, module_key, status, completed_at, updated_at)
-    values (${profile.id}, ${moduleKey}, 'completed', now(), now())
-    on conflict (partner_id, module_key)
-    do update set
-      status = 'completed',
-      completed_at = now(),
-      updated_at = now()
   `;
 }
 

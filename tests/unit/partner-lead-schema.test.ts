@@ -36,19 +36,56 @@ describe('partner lead schema', () => {
     expect(parsed.success).toBe(true);
   });
 
-  it('requires plan, feature, owner email, and branch address before lead submission', () => {
+  it('accepts a lead before package and onboarding details are known', () => {
     const parsed = partnerLeadSchema.safeParse({
-      ...validLead,
-      email: '',
-      branchAddress: '',
-      requestedPlanId: '',
-      requestedFeatureCodes: [],
+      restaurantName: 'Cafe Ledger',
+      ownerName: 'Asha Shah',
+      phone: '+91 98765 43210',
+      city: 'Bengaluru',
+      locality: 'Indiranagar',
+      relationshipContext: 'Owner asked for a Nom walkthrough after an in-person visit.',
+      consentToContact: true,
     });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data).toMatchObject({
+        country: 'India',
+        timezone: 'Asia/Kolkata',
+        outletCount: 1,
+        requestedFeatureCodes: [],
+        requestedBranchCount: 1,
+        productsInterested: [],
+        painPoints: [],
+      });
+      expect(parsed.data.requestedPlanId).toBeUndefined();
+    }
+  });
+
+  it('still requires lead identity, location, relationship, and consent', () => {
+    const parsed = partnerLeadSchema.safeParse({ consentToContact: false });
 
     expect(parsed.success).toBe(false);
     if (!parsed.success) {
       const paths = parsed.error.issues.map((issue) => issue.path.join('.'));
-      expect(paths).toEqual(expect.arrayContaining(['email', 'branchAddress', 'requestedPlanId', 'requestedFeatureCodes']));
+      expect(paths).toEqual(
+        expect.arrayContaining([
+          'restaurantName',
+          'ownerName',
+          'phone',
+          'city',
+          'locality',
+          'relationshipContext',
+          'consentToContact',
+        ])
+      );
     }
+  });
+
+  it('validates owner email when one is supplied', () => {
+    const parsed = partnerLeadSchema.safeParse({ ...validLead, email: 'not-an-email' });
+
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) expect(parsed.error.issues[0]?.path).toEqual(['email']);
   });
 });

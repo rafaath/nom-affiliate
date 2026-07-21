@@ -1,13 +1,18 @@
 import { updateDealStageAction } from '@/app/actions/admin';
 import { ConfigRequired } from '@/components/program/config-required';
 import { EmptyState } from '@/components/program/empty-state';
+import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import { getAdminDashboard } from '@/lib/partner-program/data';
 import { formatCurrency } from '@/lib/partner-program/format';
-import { DEAL_STAGES } from '@/lib/partner-program/types';
+import { dealStageLabels } from '@/lib/partner-program/labels';
+import { legalDealStageTargets } from '@/lib/partner-program/status-machine';
+import type { DealStage } from '@/lib/partner-program/types';
 import { requirePartnerAdmin } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
 
@@ -19,6 +24,8 @@ export default async function AdminDealsPage() {
     const features = dashboard.platformCatalog.features;
 
     return (
+      <div>
+        <PageHeader eyebrow="Partner admin" title="Deals" description="Move accepted opportunities through legal stages without replaying downstream work." />
       <Card>
         <CardHeader>
           <CardTitle>Platform deal management</CardTitle>
@@ -26,7 +33,7 @@ export default async function AdminDealsPage() {
         </CardHeader>
         <CardContent className="grid gap-4">
           {dashboard.deals.map((deal) => (
-            <div key={deal.id} className="rounded-xl border p-4">
+            <div key={deal.id} className="record-panel">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="font-semibold">{deal.partner_leads?.restaurant_name}</div>
@@ -51,21 +58,21 @@ export default async function AdminDealsPage() {
               </div>
               <form action={updateDealStageAction} className="mt-4 grid gap-3">
                 <input type="hidden" name="dealId" value={deal.id} />
-                <div className="grid gap-3 md:grid-cols-3">
-                  <select name="stage" className="h-10 rounded-md border border-input bg-background px-3 text-sm" defaultValue={deal.stage}>
-                    {DEAL_STAGES.map((stage) => (
-                      <option key={stage} value={stage}>{stage.replaceAll('_', ' ')}</option>
+                <div className="grid gap-3 xl:grid-cols-3">
+                  <div className="grid gap-2"><Label htmlFor={`deal-stage-${deal.id}`}>Deal stage</Label><NativeSelect id={`deal-stage-${deal.id}`} name="stage" defaultValue={deal.stage}>
+                    {legalDealStageTargets(deal.stage as DealStage).map((stage) => (
+                      <option key={stage} value={stage}>{dealStageLabels[stage]}</option>
                     ))}
-                  </select>
-                  <select name="requestedPlanId" className="h-10 rounded-md border border-input bg-background px-3 text-sm" defaultValue={deal.subscription_plan_id ?? ''}>
+                  </NativeSelect></div>
+                  <div className="grid gap-2"><Label htmlFor={`deal-plan-${deal.id}`}>Approved plan</Label><NativeSelect id={`deal-plan-${deal.id}`} name="requestedPlanId" defaultValue={deal.subscription_plan_id ?? ''}>
                     <option value="">Default best-fit plan</option>
                     {plans.map((plan) => (
                       <option key={plan.id} value={plan.id}>
                         {plan.name} · {plan.currency_code} {(plan.price_cents / 100).toLocaleString()}
                       </option>
                     ))}
-                  </select>
-                  <Input name="requestedBranchCount" type="number" min={1} defaultValue={deal.requested_branch_count || 1} placeholder="Branch count" />
+                  </NativeSelect></div>
+                  <div className="grid gap-2"><Label htmlFor={`deal-branches-${deal.id}`}>Branch count</Label><Input id={`deal-branches-${deal.id}`} name="requestedBranchCount" type="number" min={1} defaultValue={deal.requested_branch_count || 1} /></div>
                 </div>
                 <div className="grid gap-2 rounded-lg border p-3">
                   <div className="text-sm font-medium">Sold platform capabilities</div>
@@ -83,9 +90,9 @@ export default async function AdminDealsPage() {
                     ))}
                   </div>
                 </div>
-                <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
-                  <Input name="expectedCommissionCents" type="number" min={0} placeholder="Commission cents" />
-                  <Input name="note" placeholder="Next action / note" />
+                <div className="grid gap-3 xl:grid-cols-[1fr_1fr_auto] xl:items-end">
+                  <div className="grid gap-2"><Label htmlFor={`deal-commission-${deal.id}`}>Expected commission (cents)</Label><Input id={`deal-commission-${deal.id}`} name="expectedCommissionCents" type="number" min={0} defaultValue={deal.expected_commission_cents ?? 0} /></div>
+                  <div className="grid gap-2"><Label htmlFor={`deal-note-${deal.id}`}>Next action / note</Label><Input id={`deal-note-${deal.id}`} name="note" defaultValue={deal.next_action ?? ''} /></div>
                   <Button type="submit">Update deal</Button>
                 </div>
               </form>
@@ -94,6 +101,7 @@ export default async function AdminDealsPage() {
           {dashboard.deals.length === 0 ? <EmptyState title="No deals" description="Accepted leads become deals here." /> : null}
         </CardContent>
       </Card>
+      </div>
     );
   } catch (error) {
     if (isSupabaseConfigError(error)) return <ConfigRequired message={error.message} />;

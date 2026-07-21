@@ -2,16 +2,32 @@ import {
   assertPartnerPlatformSchemaReady,
   assertPartnerSchemaReady,
   getDatabase,
+  toJsonValue,
   toPartnerDatabaseError,
   type SqlExecutor,
 } from '@/lib/db/client';
+import { z } from 'zod';
 import { getActivePlatformPlan, getDefaultPlatformPlan } from './platform/catalog';
 import { assertCommissionCanBeApproved, refreshCommissionEligibility } from './platform/commission-eligibility';
 import { createOnboardingRequestForDeal, syncDealFeatureSelections } from './platform/onboarding-requests';
 import { reconcileAndPersistLead } from './platform/reconciliation';
 import { upsertSetupChecklistForDeal } from './platform/setup-task-generator';
 import { verifySetupChecklist } from './platform/setup-verification';
-import type { PlatformLinkKind } from './platform/types';
+import {
+  assertTransition,
+  canTransitionCommission,
+  canTransitionDeal,
+  canTransitionLead,
+  canTransitionSetup,
+} from './status-machine';
+import type {
+  ApplicationStatus,
+  CommissionStatus,
+  DealStage,
+  LeadStatus,
+  PlatformLinkKind,
+  SetupStatus,
+} from './types';
 
 export async function isPartnerAdmin(authUserId: string, email?: string | null) {
   try {
@@ -80,7 +96,7 @@ async function upsertPlatformAttributionForDeal(dealId: string, sql: SqlExecutor
       ${deal.branch_id || null},
       ${deal.sales_mode === 'simple_referral' ? 'referred' : 'sold'},
       now() + interval '90 days',
-      ${JSON.stringify({ source: 'partner_admin_deal_update' })}::jsonb
+      ${sql.json(toJsonValue({ source: 'partner_admin_deal_update' }))}
     )
     on conflict do nothing
   `;
@@ -90,7 +106,7 @@ export async function reviewApplication(input: {
   actorAuthUserId: string;
   applicationId: string;
   partnerId: string;
-  status: string;
+  status: ApplicationStatus;
   note: string;
 }) {
   await assertPartnerSchemaReady();
@@ -139,7 +155,7 @@ export async function reviewLead(input: {
   actorAuthUserId: string;
   leadId: string;
   partnerId: string;
-  status: string;
+  status: LeadStatus;
   note: string;
   platformLinkKind?: PlatformLinkKind;
   existingFranchiseId?: string | null;
@@ -147,6 +163,7 @@ export async function reviewLead(input: {
   requestedPlanId?: string | null;
   requestedFeatureCodes?: string[];
   requestedBranchCount?: number;
+  ownerEmail?: string | null;
 }) {
   await assertPartnerPlatformSchemaReady();
   const sql = getDatabase();
@@ -157,9 +174,66 @@ export async function reviewLead(input: {
       from public.partner_leads
       where id = ${input.leadId}
       limit 1
+      for update
     `;
     const previousLead = previousRows[0] as any;
     if (!previousLead) throw new Error('Lead not found.');
+    if (previousLead.partner_id !== input.partnerId) throw new Error('Lead partner does not match the submitted review.');
+    const ownerEmail = input.ownerEmail === undefined ? previousLead.email : input.ownerEmail?.trim() || null;
+    if (!z.string().email().nullable().safeParse(ownerEmail).success) {
+      throw new Error('Enter a valid owner email before continuing.');
+    }
+    const statusChanged = previousLead.status !== input.status;
+    if (statusChanged) {
+      assertTransition(
+        canTransitionLead(previousLead.status as LeadStatus, input.status),
+        previousLead.status,
+        input.status,
+        'lead'
+      );
+    }
+
+    if (!statusChanged) {
+      await tx`
+        update public.partner_leads
+        set
+          email = ${ownerEmail},
+          existing_franchise_id = coalesce(${input.existingFranchiseId || null}::uuid, existing_franchise_id),
+          existing_branch_id = coalesce(${input.existingBranchId || null}::uuid, existing_branch_id),
+          updated_at = now()
+        where id = ${input.leadId}
+      `;
+
+      if (input.status === 'accepted' && input.requestedPlanId) {
+        const plan = await resolvePlan(input.requestedPlanId, tx);
+        const selectedFeatureCodes = input.requestedFeatureCodes?.filter(Boolean) ?? [];
+        const dealRows = await tx`
+          update public.partner_deals
+          set
+            subscription_plan_id = ${plan.id},
+            products_sold = case
+              when ${selectedFeatureCodes.length} > 0 then ${selectedFeatureCodes}
+              else products_sold
+            end,
+            requested_branch_count = coalesce(${input.requestedBranchCount || null}, requested_branch_count),
+            updated_at = now()
+          where lead_id = ${input.leadId}
+          returning id, franchise_id, branch_id, products_sold
+        `;
+        const deal = dealRows[0] as any;
+        if (deal) {
+          await syncDealFeatureSelections({
+            dealId: deal.id,
+            franchiseId: input.existingFranchiseId || deal.franchise_id,
+            branchId: input.existingBranchId || deal.branch_id,
+            planId: plan.id,
+            requestedFeatureCodes: selectedFeatureCodes.length > 0 ? selectedFeatureCodes : deal.products_sold,
+            sql: tx,
+          });
+        }
+      }
+      return;
+    }
     const reconciliation = await reconcileAndPersistLead(input.leadId, tx);
     const platformLinkKind = input.platformLinkKind || reconciliation.matchKind;
     const existingFranchiseId = input.existingFranchiseId || reconciliation.existingFranchiseId;
@@ -187,6 +261,7 @@ export async function reviewLead(input: {
         platform_reviewed_at = now(),
         existing_franchise_id = ${existingFranchiseId},
         existing_branch_id = ${existingBranchId},
+        email = ${ownerEmail},
         updated_at = now()
       where id = ${input.leadId}
     `;
@@ -278,7 +353,9 @@ export async function reviewLead(input: {
           'lead_accepted',
           'simple_referral',
           ${platformLinkKind === 'new_restaurant'
-            ? 'Internal dashboard must approve and execute platform onboarding.'
+            ? ownerEmail
+              ? 'Internal dashboard must approve and execute platform onboarding.'
+              : 'Collect the owner email before starting platform onboarding.'
             : 'Confirm scope, plan, and partner attribution against existing platform records.'},
           ${platformLinkKind},
           ${existingFranchiseId},
@@ -289,8 +366,8 @@ export async function reviewLead(input: {
           ${previousLead.requested_package_summary || null},
           ${previousLead.requested_monthly_revenue_cents || 0},
           ${previousLead.requested_commission_preview_cents || 0},
-          ${JSON.stringify(previousLead.onboarding_intent || {})}::jsonb,
-          ${JSON.stringify(approvalPackageSnapshot)}::jsonb,
+          ${tx.json(toJsonValue(previousLead.onboarding_intent || {}))},
+          ${tx.json(toJsonValue(approvalPackageSnapshot))},
           ${plan.id},
           ${selectedFeatureCodes},
           now()
@@ -329,7 +406,7 @@ export async function reviewLead(input: {
         sql: tx,
       });
 
-      if (platformLinkKind === 'new_restaurant') {
+      if (platformLinkKind === 'new_restaurant' && ownerEmail) {
         await createOnboardingRequestForDeal({
           dealId: deal.id,
           requestedPlanId: plan.id,
@@ -345,9 +422,9 @@ export async function reviewLead(input: {
 export async function updateDealStage(input: {
   actorAuthUserId: string;
   dealId: string;
-  stage: string;
+  stage: DealStage;
   note: string;
-  expectedCommissionCents: number;
+  expectedCommissionCents?: number;
   requestedPlanId?: string | null;
   requestedFeatureCodes?: string[];
   requestedBranchCount?: number;
@@ -362,9 +439,19 @@ export async function updateDealStage(input: {
       left join public.partner_platform_onboarding_requests req on req.id = d.onboarding_request_id
       where d.id = ${input.dealId}
       limit 1
+      for update of d
     `;
     const previousDeal = previousRows[0] as any;
     if (!previousDeal) throw new Error('Deal not found.');
+    const stageChanged = previousDeal.stage !== input.stage;
+    if (stageChanged) {
+      assertTransition(
+        canTransitionDeal(previousDeal.stage as DealStage, input.stage),
+        previousDeal.stage,
+        input.stage,
+        'deal'
+      );
+    }
     const approvedBranchCount = input.requestedBranchCount || previousDeal.requested_branch_count || 1;
     const plan = input.requestedPlanId
       ? await getActivePlatformPlan(input.requestedPlanId, tx)
@@ -388,13 +475,10 @@ export async function updateDealStage(input: {
       set
         stage = ${input.stage},
         next_action = ${input.note || null},
-        expected_commission_cents = case
-          when ${input.expectedCommissionCents} > 0 then ${input.expectedCommissionCents}
-          else expected_commission_cents
-        end,
+        expected_commission_cents = coalesce(${input.expectedCommissionCents ?? null}, expected_commission_cents),
         subscription_plan_id = ${plan.id},
         products_sold = ${selectedFeatureCodes},
-        approval_package_snapshot = approval_package_snapshot || ${JSON.stringify({
+        approval_package_snapshot = approval_package_snapshot || ${tx.json(toJsonValue({
           updated_by: input.actorAuthUserId,
           updated_at: new Date().toISOString(),
           plan_id: plan.id,
@@ -402,10 +486,10 @@ export async function updateDealStage(input: {
           plan_name: plan.name,
           branch_count: approvedBranchCount,
           feature_codes: selectedFeatureCodes,
-        })}::jsonb,
-        won_at = case when ${input.stage} = 'won' then now() else won_at end,
-        lost_at = case when ${input.stage} = 'lost' then now() else lost_at end,
-        live_at = case when ${input.stage} = 'live' then now() else live_at end,
+        }))},
+        won_at = case when ${stageChanged} and ${input.stage} = 'won' then now() else won_at end,
+        lost_at = case when ${stageChanged} and ${input.stage} = 'lost' then now() else lost_at end,
+        live_at = case when ${stageChanged} and ${input.stage} = 'live' then now() else live_at end,
         updated_at = now()
       where id = ${input.dealId}
       returning *
@@ -413,12 +497,14 @@ export async function updateDealStage(input: {
     const deal = dealRows[0] as any;
     if (!deal) throw new Error('Deal not found.');
 
-    await tx`
-      insert into public.partner_deal_events (deal_id, actor_auth_user_id, event_type, to_stage, note)
-      values (${input.dealId}, ${input.actorAuthUserId}, 'stage_updated', ${input.stage}, ${input.note || null})
-    `;
+    if (stageChanged) {
+      await tx`
+        insert into public.partner_deal_events (deal_id, actor_auth_user_id, event_type, from_stage, to_stage, note)
+        values (${input.dealId}, ${input.actorAuthUserId}, 'stage_updated', ${previousDeal.stage}, ${input.stage}, ${input.note || null})
+      `;
+    }
 
-    if (deal.platform_link_kind === 'new_restaurant') {
+    if (stageChanged && deal.platform_link_kind === 'new_restaurant') {
       const onboardingEditable =
         !deal.onboarding_request_id ||
         ['draft', 'submitted', 'rejected', 'failed'].includes(String(previousDeal.onboarding_request_status || ''));
@@ -433,7 +519,7 @@ export async function updateDealStage(input: {
       }
     }
 
-    if (input.stage === 'won') {
+    if (stageChanged && input.stage === 'won') {
       if (deal.platform_link_kind !== 'new_restaurant') {
         await upsertPlatformAttributionForDeal(deal.id, tx);
       }
@@ -456,7 +542,7 @@ export async function updateDealStage(input: {
           ${deal.id},
           'referral',
           'pending',
-          ${input.expectedCommissionCents || deal.expected_commission_cents || 0},
+          ${input.expectedCommissionCents ?? deal.expected_commission_cents ?? 0},
           ${deal.currency_code || 'INR'},
           'Pending validation after restaurant becomes a paying Nom customer.',
           now() + interval '30 days'
@@ -471,7 +557,7 @@ export async function updateDealStage(input: {
       await upsertSetupChecklistForDeal(deal.id, tx);
     }
 
-    if (input.stage === 'live') {
+    if (stageChanged && input.stage === 'live') {
       await upsertPlatformAttributionForDeal(deal.id, tx);
       const commissionRows = await tx`
         select id
@@ -489,13 +575,22 @@ export async function updateDealStage(input: {
 export async function reviewSetup(input: {
   actorAuthUserId: string;
   checklistId: string;
-  status: string;
+  status: SetupStatus;
   note: string;
 }) {
   await assertPartnerPlatformSchemaReady();
   const sql = getDatabase();
 
   await sql.begin(async (tx) => {
+    const lockedRows = await tx`
+      select status
+      from public.partner_setup_checklists
+      where id = ${input.checklistId}
+      limit 1
+      for update
+    `;
+    if (!lockedRows[0]) throw new Error('Setup checklist not found.');
+
     const verification = await verifySetupChecklist(input.checklistId, tx);
     if (input.status === 'approved' && !verification.passed) {
       throw new Error(
@@ -505,13 +600,27 @@ export async function reviewSetup(input: {
       );
     }
 
+    const currentRows = await tx`
+      select status
+      from public.partner_setup_checklists
+      where id = ${input.checklistId}
+      limit 1
+      for update
+    `;
+    const currentStatus = (currentRows[0] as { status: SetupStatus } | undefined)?.status;
+    if (!currentStatus) throw new Error('Setup checklist not found.');
+    const statusChanged = currentStatus !== input.status;
+    if (statusChanged) {
+      assertTransition(canTransitionSetup(currentStatus, input.status), currentStatus, input.status, 'setup');
+    }
+
     await tx`
       update public.partner_setup_checklists
       set
         status = ${input.status},
         admin_review_note = ${input.note || null},
-        admin_approved_by = case when ${input.status} = 'approved' then ${input.actorAuthUserId}::uuid else null end,
-        admin_approved_at = case when ${input.status} = 'approved' then now() else null end,
+        admin_approved_by = case when ${statusChanged} and ${input.status} = 'approved' then ${input.actorAuthUserId}::uuid else admin_approved_by end,
+        admin_approved_at = case when ${statusChanged} and ${input.status} = 'approved' then now() else admin_approved_at end,
         updated_at = now()
       where id = ${input.checklistId}
     `;
@@ -521,14 +630,38 @@ export async function reviewSetup(input: {
 export async function reviewCommission(input: {
   actorAuthUserId: string;
   commissionId: string;
-  status: string;
-  amountCents: number;
+  status: CommissionStatus;
+  amountCents?: number;
   note: string;
 }) {
   await assertPartnerPlatformSchemaReady();
   const sql = getDatabase();
 
   await sql.begin(async (tx) => {
+    const currentRows = await tx`
+      select status
+      from public.partner_commissions
+      where id = ${input.commissionId}
+      limit 1
+      for update
+    `;
+    const currentStatus = (currentRows[0] as { status: CommissionStatus } | undefined)?.status;
+    if (!currentStatus) throw new Error('Commission not found.');
+    const statusChanged = currentStatus !== input.status;
+    if (!statusChanged) {
+      await tx`
+        update public.partner_commissions
+        set
+          review_note = ${input.note || null},
+          reviewed_by = ${input.actorAuthUserId},
+          amount_cents = coalesce(${input.amountCents ?? null}, amount_cents),
+          updated_at = now()
+        where id = ${input.commissionId}
+      `;
+      return;
+    }
+    assertTransition(canTransitionCommission(currentStatus, input.status), currentStatus, input.status, 'commission');
+
     if (input.status === 'approved') {
       await assertCommissionCanBeApproved(input.commissionId, tx);
     } else {
@@ -541,7 +674,7 @@ export async function reviewCommission(input: {
         status = ${input.status},
         review_note = ${input.note || null},
         reviewed_by = ${input.actorAuthUserId},
-        amount_cents = case when ${input.amountCents} > 0 then ${input.amountCents} else amount_cents end,
+        amount_cents = coalesce(${input.amountCents ?? null}, amount_cents),
         approved_at = case when ${input.status} = 'approved' then now() else approved_at end,
         rejection_reason = case when ${input.status} = 'rejected' then ${input.note || 'Rejected by admin'} else rejection_reason end,
         held_reason = case when ${input.status} = 'held' then ${input.note || 'Held by admin'} else held_reason end,

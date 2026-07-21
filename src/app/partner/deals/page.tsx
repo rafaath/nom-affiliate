@@ -1,5 +1,6 @@
 import { ConfigRequired } from '@/components/program/config-required';
 import { EmptyState } from '@/components/program/empty-state';
+import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getPartnerDashboard } from '@/lib/partner-program/data';
@@ -13,6 +14,8 @@ export default async function PartnerDealsPage() {
     const dashboard = await getPartnerDashboard(user.id, user.email);
 
     return (
+      <div>
+      <PageHeader eyebrow="Partner portal" title="Deals" description="Track accepted restaurants through their sales and go-live stages." />
       <Card>
         <CardHeader>
           <CardTitle>Restaurant deal pipeline</CardTitle>
@@ -41,12 +44,11 @@ export default async function PartnerDealsPage() {
             <EmptyState
               title="No accepted deals yet"
               description="When Nom accepts a lead, the deal pipeline appears here."
-              actionHref="/partner/leads"
-              actionLabel="Submit a lead"
             />
           ) : null}
         </CardContent>
       </Card>
+      </div>
     );
   } catch (error) {
     if (isSupabaseConfigError(error)) return <ConfigRequired message={error.message} />;

@@ -1,4 +1,4 @@
-import { getDatabase, type SqlExecutor } from '@/lib/db/client';
+import { getDatabase, toJsonValue, type SqlExecutor } from '@/lib/db/client';
 import type { SetupVerificationResult, VerificationStatus } from './types';
 
 type ChecklistContext = {
@@ -452,7 +452,7 @@ export async function verifySetupChecklist(checklistId: string, sql: SqlExecutor
         verification_status = ${verified.status},
         verification_checked_at = now(),
         verification_summary = ${verified.summary},
-        verification_evidence = ${JSON.stringify(verified.evidence)}::jsonb,
+        verification_evidence = ${sql.json(toJsonValue(verified.evidence))},
         status = case
           when ${verified.status} = 'passed' then 'completed'
           when ${verified.status} in ('failed', 'blocked') then 'blocked'
@@ -470,12 +470,12 @@ export async function verifySetupChecklist(checklistId: string, sql: SqlExecutor
     set
       franchise_id = ${context.franchise_id},
       branch_id = ${context.branch_id},
-      verification_summary = ${JSON.stringify({
+      verification_summary = ${sql.json(toJsonValue({
         checked_at: new Date().toISOString(),
         passed: results.filter((item) => item.status === 'passed').length,
         total: results.length,
         blocking_failures: blockingFailures.length,
-      })}::jsonb,
+      }))},
       last_verified_at = now(),
       status = case
         when ${blockingFailures.length} = 0 and status in ('assigned', 'in_progress', 'corrections_requested', 'failed')

@@ -1,10 +1,13 @@
 import { resolveDisputeAction } from '@/app/actions/admin';
 import { ConfigRequired } from '@/components/program/config-required';
 import { EmptyState } from '@/components/program/empty-state';
+import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import { getAdminDashboard } from '@/lib/partner-program/data';
 import { DISPUTE_STATUSES } from '@/lib/partner-program/types';
 import { requirePartnerAdmin } from '@/lib/supabase/auth';
@@ -16,6 +19,8 @@ export default async function AdminDisputesPage() {
     const dashboard = await getAdminDashboard();
 
     return (
+      <div>
+      <PageHeader eyebrow="Partner admin" title="Disputes" description="Resolve ownership, commission, setup, and payout questions with a recorded decision." />
       <Card>
         <CardHeader>
           <CardTitle>Dispute management</CardTitle>
@@ -31,14 +36,14 @@ export default async function AdminDisputesPage() {
                 </div>
                 <StatusBadge status={dispute.status} />
               </div>
-              <form action={resolveDisputeAction} className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+              <form action={resolveDisputeAction} className="mt-4 grid gap-3 xl:grid-cols-[1fr_1fr_auto] xl:items-end">
                 <input type="hidden" name="disputeId" value={dispute.id} />
-                <select name="status" className="h-10 rounded-md border border-input bg-background px-3 text-sm" defaultValue={dispute.status}>
+                <div className="grid gap-2"><Label htmlFor={`dispute-status-${dispute.id}`}>Dispute status</Label><NativeSelect id={`dispute-status-${dispute.id}`} name="status" defaultValue={dispute.status}>
                   {DISPUTE_STATUSES.map((status) => (
                     <option key={status} value={status}>{status.replaceAll('_', ' ')}</option>
                   ))}
-                </select>
-                <Input name="decision" placeholder="Final decision" />
+                </NativeSelect></div>
+                <div className="grid gap-2"><Label htmlFor={`dispute-decision-${dispute.id}`}>Final decision</Label><Input id={`dispute-decision-${dispute.id}`} name="decision" /></div>
                 <Button type="submit">Resolve</Button>
               </form>
             </div>
@@ -46,6 +51,7 @@ export default async function AdminDisputesPage() {
           {dashboard.disputes.length === 0 ? <EmptyState title="No disputes" description="Partner disputes appear here." /> : null}
         </CardContent>
       </Card>
+      </div>
     );
   } catch (error) {
     if (isSupabaseConfigError(error)) return <ConfigRequired message={error.message} />;

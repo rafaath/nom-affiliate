@@ -1,5 +1,6 @@
 import { ConfigRequired } from '@/components/program/config-required';
 import { EmptyState } from '@/components/program/empty-state';
+import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getAdminDashboard } from '@/lib/partner-program/data';
@@ -13,6 +14,7 @@ export default async function AdminOnboardingPage() {
 
     return (
       <div className="grid gap-6">
+        <PageHeader eyebrow="Partner admin" title="Onboarding handoff" description="Review provisioned restaurant requests and the attribution ledger." />
         <Card>
           <CardHeader>
             <CardTitle>Platform onboarding handoff</CardTitle>

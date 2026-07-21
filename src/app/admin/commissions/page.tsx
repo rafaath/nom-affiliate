@@ -1,13 +1,18 @@
 import { reviewCommissionAction } from '@/app/actions/admin';
 import { ConfigRequired } from '@/components/program/config-required';
 import { EmptyState } from '@/components/program/empty-state';
+import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import { getAdminDashboard } from '@/lib/partner-program/data';
 import { formatCurrency } from '@/lib/partner-program/format';
-import { COMMISSION_STATUSES } from '@/lib/partner-program/types';
+import { commissionStatusLabels } from '@/lib/partner-program/labels';
+import { legalCommissionStatusTargets } from '@/lib/partner-program/status-machine';
+import type { CommissionStatus } from '@/lib/partner-program/types';
 import { requirePartnerAdmin } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
 
@@ -17,6 +22,8 @@ export default async function AdminCommissionsPage() {
     const dashboard = await getAdminDashboard();
 
     return (
+      <div>
+        <PageHeader eyebrow="Partner admin" title="Commissions" description="Review eligibility, preserve amounts, and use only legal commission transitions." />
       <Card>
         <CardHeader>
           <CardTitle>Commission review</CardTitle>
@@ -24,7 +31,7 @@ export default async function AdminCommissionsPage() {
         </CardHeader>
         <CardContent className="grid gap-4">
           {dashboard.commissions.map((commission) => (
-            <div key={commission.id} className="rounded-xl border p-4">
+            <div key={commission.id} className="record-panel">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="font-semibold">{commission.partner_profiles?.full_name}</div>
@@ -46,15 +53,15 @@ export default async function AdminCommissionsPage() {
                 </div>
                 <StatusBadge status={commission.status} />
               </div>
-              <form action={reviewCommissionAction} className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+              <form action={reviewCommissionAction} className="mt-4 grid gap-3 xl:grid-cols-[1fr_1fr_1fr_auto] xl:items-end">
                 <input type="hidden" name="commissionId" value={commission.id} />
-                <select name="status" className="h-10 rounded-md border border-input bg-background px-3 text-sm" defaultValue={commission.status}>
-                  {COMMISSION_STATUSES.map((status) => (
-                    <option key={status} value={status}>{status.replaceAll('_', ' ')}</option>
+                <div className="grid gap-2"><Label htmlFor={`commission-status-${commission.id}`}>Commission status</Label><NativeSelect id={`commission-status-${commission.id}`} name="status" defaultValue={commission.status}>
+                  {legalCommissionStatusTargets(commission.status as CommissionStatus).map((status) => (
+                    <option key={status} value={status}>{commissionStatusLabels[status]}</option>
                   ))}
-                </select>
-                <Input name="amountCents" type="number" min={0} placeholder="Adjusted amount cents" />
-                <Input name="note" placeholder="Review note" />
+                </NativeSelect></div>
+                <div className="grid gap-2"><Label htmlFor={`commission-amount-${commission.id}`}>Amount (cents)</Label><Input id={`commission-amount-${commission.id}`} name="amountCents" type="number" min={0} defaultValue={commission.amount_cents ?? 0} /></div>
+                <div className="grid gap-2"><Label htmlFor={`commission-note-${commission.id}`}>Review note</Label><Input id={`commission-note-${commission.id}`} name="note" defaultValue={commission.review_note ?? ''} /></div>
                 <Button type="submit">Save</Button>
               </form>
             </div>
@@ -62,6 +69,7 @@ export default async function AdminCommissionsPage() {
           {dashboard.commissions.length === 0 ? <EmptyState title="No commissions" description="Commission records appear when deals are won." /> : null}
         </CardContent>
       </Card>
+      </div>
     );
   } catch (error) {
     if (isSupabaseConfigError(error)) return <ConfigRequired message={error.message} />;

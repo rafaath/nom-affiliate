@@ -1,5 +1,6 @@
 import { ConfigRequired } from '@/components/program/config-required';
 import { EmptyState } from '@/components/program/empty-state';
+import { PageHeader } from '@/components/program/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getPartnerDashboard } from '@/lib/partner-program/data';
 import { requireUser } from '@/lib/supabase/auth';
@@ -10,6 +11,8 @@ export default async function PartnerNotificationsPage() {
     const user = await requireUser('/partner/notifications');
     const dashboard = await getPartnerDashboard(user.id, user.email);
     return (
+      <div>
+      <PageHeader eyebrow="Partner portal" title="Notifications" description="Review important application, lead, deal, setup, commission, and payout updates." />
       <Card>
         <CardHeader>
           <CardTitle>Notifications</CardTitle>
@@ -27,6 +30,7 @@ export default async function PartnerNotificationsPage() {
           ) : null}
         </CardContent>
       </Card>
+      </div>
     );
   } catch (error) {
     if (isSupabaseConfigError(error)) return <ConfigRequired message={error.message} />;

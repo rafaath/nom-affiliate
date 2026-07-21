@@ -3,9 +3,11 @@ import type {
   CommissionStatus,
   DealStage,
   LeadStatus,
+  PainPoint,
   PartnerTier,
   PartnerType,
   PayoutStatus,
+  ProductInterest,
   SetupStatus,
 } from './types';
 
@@ -98,4 +100,30 @@ export const payoutStatusLabels: Record<PayoutStatus, string> = {
   paid: 'Paid',
   failed: 'Failed',
   held: 'Held',
+};
+
+export const productInterestLabels: Record<ProductInterest, string> = {
+  pos: 'POS and billing',
+  inventory: 'Inventory tracking',
+  qr_menu: 'QR menu',
+  qr_ordering: 'QR ordering',
+  online_ordering: 'Online ordering',
+  website: 'Restaurant website',
+  loyalty: 'Customer loyalty',
+  staff_order_management: 'Staff order management',
+  full_restaurant_setup: 'Complete restaurant setup',
+  not_sure: 'Not sure yet',
+};
+
+export const painPointLabels: Record<PainPoint, string> = {
+  manual_billing: 'Manual billing',
+  old_pos: 'Outdated POS system',
+  no_inventory_tracking: 'No inventory tracking',
+  menu_update_issues: 'Difficult menu updates',
+  order_mistakes: 'Order mistakes',
+  no_direct_ordering: 'No direct online ordering',
+  high_aggregator_dependency: 'Too dependent on delivery apps',
+  poor_reporting: 'Limited business reports',
+  staff_management_issues: 'Staff management challenges',
+  wants_qr_menu: 'Wants a QR menu',
 };

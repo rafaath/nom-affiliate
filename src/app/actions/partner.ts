@@ -6,7 +6,6 @@ import { assertPartnerSchemaReady, toPartnerDatabaseError } from '@/lib/db/clien
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/supabase/auth';
 import {
-  completeTrainingStep,
   createPartnerLead,
   getPartnerProfileByAuthUser,
   savePendingPartnerApplication,
@@ -22,6 +21,7 @@ import {
   partnerLeadSchema,
   payoutMethodSchema,
 } from '@/lib/partner-program/schemas';
+import { PARTNER_PROGRAM_TERMS_VERSION } from '@/lib/partner-program/terms';
 
 function booleanFromForm(value: FormDataEntryValue | null) {
   return value === 'on' || value === 'true' || value === 'yes' || value === '1';
@@ -53,6 +53,10 @@ export async function submitApplicationAction(formData: FormData) {
   let currentUser = await getCurrentUser();
   const email = String(currentUser?.email ?? submittedEmail).trim();
 
+  if (currentUser && (await getPartnerProfileByAuthUser(currentUser.id))) {
+    redirect('/partner?application=already-exists');
+  }
+
   if (!currentUser && (!email || password.length < 8)) {
     applicationErrorRedirect('Enter an email and a password with at least 8 characters.');
   }
@@ -70,14 +74,28 @@ export async function submitApplicationAction(formData: FormData) {
     canHelpSetup: booleanFromForm(formData.get('canHelpSetup')),
     applicantKind: formData.get('applicantKind'),
     businessName: String(formData.get('businessName') || '').trim() || undefined,
+    linkedinProfileUrl: String(formData.get('linkedinProfileUrl') || '').trim() || undefined,
+    resumeDriveUrl: String(formData.get('resumeDriveUrl') || '').trim() || undefined,
     background: formData.get('background'),
     preferredLanguage: formData.get('preferredLanguage'),
     heardFrom: formData.get('heardFrom'),
+    programTermsVersion: formData.get('programTermsVersion'),
+    programTermsAccepted: booleanFromForm(formData.get('programTermsAccepted')),
   });
 
   if (!parsed.success) {
     applicationErrorRedirect(parsed.error.issues[0]?.message || 'Invalid application');
   }
+
+  const acceptedAt = new Date().toISOString();
+  const { programTermsAccepted: _programTermsAccepted, ...applicationFields } = parsed.data;
+  void _programTermsAccepted;
+  const applicationInput = {
+    ...applicationFields,
+    programTermsVersion: PARTNER_PROGRAM_TERMS_VERSION,
+    programTermsAcceptedAt: acceptedAt,
+    programContactConsentAt: acceptedAt,
+  };
 
   try {
     await assertPartnerSchemaReady();
@@ -91,7 +109,7 @@ export async function submitApplicationAction(formData: FormData) {
   }
 
   if (!currentUser) {
-    await savePendingPartnerApplication(parsed.data);
+    await savePendingPartnerApplication(applicationInput);
 
     const fullName = String(formData.get('fullName') || '').trim();
     const phone = String(formData.get('phone') || '').trim();
@@ -141,7 +159,7 @@ export async function submitApplicationAction(formData: FormData) {
   }
 
   try {
-    await upsertPartnerApplication(currentUser.id, parsed.data);
+    await upsertPartnerApplication(currentUser.id, applicationInput);
   } catch (error) {
     logApplicationIssue('Application database save failed', {
       email,
@@ -163,28 +181,28 @@ export async function submitLeadAction(formData: FormData) {
 
   const parsed = partnerLeadSchema.safeParse({
     restaurantName: formData.get('restaurantName'),
-    legalBusinessName: formData.get('legalBusinessName'),
+    legalBusinessName: String(formData.get('legalBusinessName') || '').trim(),
     ownerName: formData.get('ownerName'),
     phone: formData.get('phone'),
     email: String(formData.get('email') || '').trim(),
     city: formData.get('city'),
     locality: formData.get('locality'),
-    branchAddress: formData.get('branchAddress'),
-    state: formData.get('state'),
+    branchAddress: String(formData.get('branchAddress') || '').trim(),
+    state: String(formData.get('state') || '').trim(),
     country: String(formData.get('country') || 'India').trim(),
     postalCode: String(formData.get('postalCode') || '').trim(),
     timezone: String(formData.get('timezone') || 'Asia/Kolkata').trim(),
     gstRegistrationType: String(formData.get('gstRegistrationType') || '').trim(),
-    restaurantType: formData.get('restaurantType'),
-    outletCount: formData.get('outletCount'),
-    requestedPlanId: formData.get('requestedPlanId'),
+    restaurantType: String(formData.get('restaurantType') || '').trim(),
+    outletCount: String(formData.get('outletCount') || '').trim() || undefined,
+    requestedPlanId: String(formData.get('requestedPlanId') || '').trim() || undefined,
     requestedFeatureCodes: parseRequestedFeatureCodes(formData.getAll('requestedFeatureCodes')),
-    requestedBranchCount: formData.get('requestedBranchCount'),
+    requestedBranchCount: String(formData.get('requestedBranchCount') || '').trim() || undefined,
     affiliateReportedPlatformLinkKind: String(formData.get('affiliateReportedPlatformLinkKind') || '').trim() || undefined,
     affiliateReportedExistingCustomerNotes: String(formData.get('affiliateReportedExistingCustomerNotes') || '').trim(),
     currentSystem: String(formData.get('currentSystem') || '').trim(),
-    productsInterested: parseProductInterests(formData.get('productsInterestedCsv')),
-    painPoints: parsePainPoints(formData.get('painPointsCsv')),
+    productsInterested: parseProductInterests(formData.getAll('productsInterested').join(',')),
+    painPoints: parsePainPoints(formData.getAll('painPoints').join(',')),
     relationshipContext: formData.get('relationshipContext'),
     consentToContact: booleanFromForm(formData.get('consentToContact')),
     preferredContactTime: String(formData.get('preferredContactTime') || '').trim(),
@@ -195,23 +213,24 @@ export async function submitLeadAction(formData: FormData) {
     redirect(`/partner/leads?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid lead')}`);
   }
 
-  await createPartnerLead(user.id, {
-    restaurant_name: parsed.data.restaurantName,
-    legal_business_name: parsed.data.legalBusinessName,
+  try {
+    await createPartnerLead(user.id, {
+      restaurant_name: parsed.data.restaurantName,
+    legal_business_name: parsed.data.legalBusinessName || null,
     owner_name: parsed.data.ownerName,
     phone: parsed.data.phone,
-    email: parsed.data.email,
+    email: parsed.data.email || null,
     city: parsed.data.city,
     locality: parsed.data.locality,
-    branch_address: parsed.data.branchAddress,
-    state: parsed.data.state,
+    branch_address: parsed.data.branchAddress || null,
+    state: parsed.data.state || null,
     country: parsed.data.country,
     postal_code: parsed.data.postalCode || null,
     timezone: parsed.data.timezone,
     gst_registration_type: parsed.data.gstRegistrationType || null,
-    restaurant_type: parsed.data.restaurantType,
+    restaurant_type: parsed.data.restaurantType || null,
     outlet_count: parsed.data.outletCount,
-    requested_plan_id: parsed.data.requestedPlanId,
+    requested_plan_id: parsed.data.requestedPlanId || null,
     requested_feature_codes: parsed.data.requestedFeatureCodes,
     requested_branch_count: parsed.data.requestedBranchCount,
     affiliate_reported_platform_link_kind: parsed.data.affiliateReportedPlatformLinkKind || null,
@@ -222,8 +241,11 @@ export async function submitLeadAction(formData: FormData) {
     relationship_context: parsed.data.relationshipContext,
     consent_to_contact: parsed.data.consentToContact,
     preferred_contact_time: parsed.data.preferredContactTime || null,
-    notes: parsed.data.notes || null,
-  });
+      notes: parsed.data.notes || null,
+    });
+  } catch (error) {
+    redirect(`/partner/leads?error=${encodeURIComponent(error instanceof Error ? error.message : 'Unable to submit lead')}`);
+  }
 
   revalidatePath('/partner');
   revalidatePath('/partner/leads');
@@ -252,23 +274,12 @@ export async function savePayoutMethodAction(formData: FormData) {
   const profile = await getPartnerProfileByAuthUser(user.id);
   if (!profile) redirect('/apply?error=profile-required');
 
-  await savePartnerPayoutMethod(user.id, parsed.data);
+  try {
+    await savePartnerPayoutMethod(user.id, parsed.data);
+  } catch (error) {
+    redirect(`/partner/payouts?error=${encodeURIComponent(error instanceof Error ? error.message : 'Unable to save payout details')}`);
+  }
 
   revalidatePath('/partner/payouts');
   redirect('/partner/payouts?saved=1');
-}
-
-export async function completeTrainingStepAction(formData: FormData) {
-  const user = await getCurrentUser();
-  if (!user) redirect('/login?returnTo=/partner');
-
-  const moduleKey = String(formData.get('moduleKey') || '').trim();
-  if (!moduleKey) redirect('/partner?error=missing-module');
-
-  const profile = await getPartnerProfileByAuthUser(user.id);
-  if (!profile) redirect('/apply?error=profile-required');
-
-  await completeTrainingStep(user.id, moduleKey);
-  revalidatePath('/partner');
-  redirect('/partner?training=updated');
 }

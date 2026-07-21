@@ -1,36 +1,47 @@
 import { savePayoutMethodAction } from '@/app/actions/partner';
 import { ConfigRequired } from '@/components/program/config-required';
+import { ApprovalStateNotice } from '@/components/program/approval-state-notice';
 import { EmptyState } from '@/components/program/empty-state';
+import { ErrorBanner } from '@/components/program/error-banner';
+import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import { getPartnerDashboard } from '@/lib/partner-program/data';
+import { evaluatePartnerLeadAccess } from '@/lib/partner-program/lead-access';
 import { requireUser } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
 
-export default async function PartnerPayoutsPage() {
+export default async function PartnerPayoutsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   try {
+    const params = await searchParams;
     const user = await requireUser('/partner/payouts');
     const dashboard = await getPartnerDashboard(user.id, user.email);
+    const access = evaluatePartnerLeadAccess(dashboard.profile);
 
     return (
-      <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr]">
-        <Card>
+      <div>
+        <PageHeader eyebrow="Partner portal" title="Payout details" description="Maintain reviewed payout information and see its approval state." />
+        {!access.allowed ? <div className="mb-7"><ApprovalStateNotice access={access} /></div> : null}
+      <div className="grid gap-8 xl:grid-cols-[0.85fr_1.15fr]">
+        {access.allowed ? <Card>
           <CardHeader>
             <CardTitle>Add payout details</CardTitle>
             <CardDescription>UPI is preferred for v1. Bank details use a secure reference only.</CardDescription>
           </CardHeader>
           <CardContent>
+            <ErrorBanner message={params.error} />
             <form action={savePayoutMethodAction} className="grid gap-4">
               <Field label="Payout name" name="payoutName" required />
               <div className="grid gap-2">
                 <Label htmlFor="payoutType">Payout type</Label>
-                <select id="payoutType" name="payoutType" className="h-10 rounded-md border border-input bg-background px-3 text-sm" defaultValue="upi">
+                <NativeSelect id="payoutType" name="payoutType" defaultValue="upi">
                   <option value="upi">UPI</option>
                   <option value="bank_reference">Bank reference</option>
-                </select>
+                </NativeSelect>
               </div>
               <Field label="UPI ID" name="upiId" placeholder="name@bank" />
               <Field label="Bank name" name="bankName" />
@@ -41,7 +52,7 @@ export default async function PartnerPayoutsPage() {
               <Button type="submit">Save payout method</Button>
             </form>
           </CardContent>
-        </Card>
+        </Card> : null}
 
         <Card>
           <CardHeader>
@@ -63,6 +74,7 @@ export default async function PartnerPayoutsPage() {
             ) : null}
           </CardContent>
         </Card>
+      </div>
       </div>
     );
   } catch (error) {

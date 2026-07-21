@@ -13,14 +13,20 @@ export default async function PartnerSetupPage() {
 
     return (
       <div className="grid gap-6">
+        <div>
+          <h1 className="text-2xl font-bold">Restaurant setup</h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            This page appears when Nom assigns you to help launch a won restaurant. The checks reflect verified RMS configuration, not self-reported tasks. An approved setup is required only for setup commissions.
+          </p>
+        </div>
         {dashboard.setupChecklists.map((checklist) => (
           <Card key={checklist.id}>
             <CardHeader>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <CardTitle>Restaurant setup checklist</CardTitle>
+                  <CardTitle>{checklist.partner_deals?.restaurant_name ?? 'Restaurant setup checklist'}</CardTitle>
                   <CardDescription>
-                    Deal stage: {checklist.partner_deals?.stage ?? 'assigned'} · Platform checks{' '}
+                    Deal stage: {formatStage(checklist.partner_deals?.stage ?? 'assigned')} · RMS checks{' '}
                     {checklist.verification_summary?.total
                       ? `${checklist.verification_summary.passed}/${checklist.verification_summary.total} passed`
                       : 'not checked yet'}
@@ -43,7 +49,10 @@ export default async function PartnerSetupPage() {
           </Card>
         ))}
         {dashboard.setupChecklists.length === 0 ? (
-          <EmptyState title="No setup assigned yet" description="Setup checklists appear after a restaurant is won and assigned." />
+          <EmptyState
+            title="No restaurant setup assigned"
+            description="When Nom assigns you to implement a won restaurant, its verified RMS setup checks will appear here."
+          />
         ) : null}
       </div>
     );
@@ -51,4 +60,8 @@ export default async function PartnerSetupPage() {
     if (isSupabaseConfigError(error)) return <ConfigRequired message={error.message} />;
     throw error;
   }
+}
+
+function formatStage(stage: string) {
+  return stage.replaceAll('_', ' ');
 }

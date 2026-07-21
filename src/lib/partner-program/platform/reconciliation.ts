@@ -1,4 +1,4 @@
-import { getDatabase, type SqlExecutor } from '@/lib/db/client';
+import { getDatabase, toJsonValue, type SqlExecutor } from '@/lib/db/client';
 import {
   buildLeadIdentity,
   isLikelyDuplicate,
@@ -259,7 +259,7 @@ export async function persistLeadReconciliation(
     set
       platform_match_kind = ${result.matchKind},
       platform_match_confidence = ${result.confidence},
-      platform_match_evidence = ${JSON.stringify(result.evidence)}::jsonb,
+      platform_match_evidence = ${sql.json(toJsonValue(result.evidence))},
       platform_review_decision = ${result.reviewDecision},
       duplicate_of_lead_id = ${result.duplicateLeadId},
       existing_franchise_id = ${result.existingFranchiseId},
