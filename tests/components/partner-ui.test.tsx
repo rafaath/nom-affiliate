@@ -125,6 +125,24 @@ describe('partner UI foundations', () => {
     expect(screen.getByText('No leads')).toBeVisible();
   });
 
+  it('links approved partners to the required agreement', () => {
+    render(
+      <ApprovalStateNotice
+        access={{
+          allowed: false,
+          code: 'agreement_required',
+          message: 'Review and accept the current Referral Partner Agreement.',
+          profile: { ...profile, application_status: 'approved_affiliate' },
+        }}
+      />
+    );
+
+    expect(screen.getByRole('link', { name: 'Review and accept agreement' })).toHaveAttribute(
+      'href',
+      '/partner/agreement'
+    );
+  });
+
   it('pairs the server-friendly native select with an accessible label', () => {
     render(
       <div>

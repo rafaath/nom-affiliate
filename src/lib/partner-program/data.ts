@@ -13,10 +13,18 @@ import { reconcileLeadAgainstPlatform, persistLeadReconciliation } from './platf
 import { createReferralCode } from './referral';
 import { defaultPartnerResources } from './resources';
 import { assertPartnerLeadAccess, evaluatePartnerLeadAccess, type LeadAccessResult } from './lead-access';
-import type { PartnerLead, PartnerProfile } from './types';
+import { getCurrentReferralPartnerAgreementDocument } from './referral-agreement.server';
+import { REFERRAL_PARTNER_AGREEMENT_VERSION } from './referral-agreement';
+import {
+  LEAD_ENABLED_APPLICATION_STATUSES,
+  type PartnerAgreementAcceptance,
+  type PartnerLead,
+  type PartnerProfile,
+} from './types';
 
 export type PartnerDashboard = {
   profile: PartnerProfile | null;
+  agreementAcceptance: PartnerAgreementAcceptance | null;
   leads: any[];
   deals: any[];
   commissions: any[];
@@ -67,6 +75,8 @@ export type PartnerApplicationInput = {
   programTermsVersion: string | null;
   programTermsAcceptedAt: string | null;
   programContactConsentAt: string | null;
+  privacyNoticeVersion: string | null;
+  privacyNoticeAcknowledgedAt: string | null;
 };
 
 export type PartnerPayoutMethodInput = {
@@ -131,6 +141,8 @@ export type PendingPartnerApplicationRow = {
   program_terms_version: string | null;
   program_terms_accepted_at: string | null;
   program_contact_consent_at: string | null;
+  privacy_notice_version: string | null;
+  privacy_notice_acknowledged_at: string | null;
 };
 
 function maybeSingle<T>(value: T | T[] | null): T | null {
@@ -165,6 +177,28 @@ async function getPartnerProfileForUpdate(sql: SqlExecutor, authUserId: string) 
   `;
 
   return (rows[0] as PartnerProfile | undefined) ?? null;
+}
+
+async function getCurrentAgreementAcceptanceWithClient(sql: SqlExecutor, partnerId: string) {
+  const rows = await sql`
+    select
+      id,
+      partner_id,
+      auth_user_id,
+      accepted_email,
+      agreement_title,
+      agreement_version,
+      agreement_sha256,
+      accepted_at,
+      source_path
+    from public.partner_agreement_acceptances
+    where partner_id = ${partnerId}
+      and agreement_version = ${REFERRAL_PARTNER_AGREEMENT_VERSION}
+    order by accepted_at desc
+    limit 1
+  `;
+
+  return (rows[0] as PartnerAgreementAcceptance | undefined) ?? null;
 }
 
 export async function getPartnerProfileByAuthUser(authUserId: string, sql: SqlExecutor = getDatabase()) {
@@ -209,7 +243,10 @@ export async function getPartnerSalesCatalog(authUserId: string): Promise<Partne
     await assertPartnerPlatformSchemaReady();
     const sql = getDatabase();
     const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
-    const eligibleProfile = assertPartnerLeadAccess(profile);
+    const agreementAcceptance = profile
+      ? await getCurrentAgreementAcceptanceWithClient(sql, profile.id)
+      : null;
+    const eligibleProfile = assertPartnerLeadAccess(profile, agreementAcceptance);
     const [platformCatalog, commissionRules] = await Promise.all([
       getPlatformCatalog(sql),
       getCommissionPreviewRules(sql, eligibleProfile.partner_type),
@@ -227,8 +264,28 @@ export async function getPartnerSalesCatalog(authUserId: string): Promise<Partne
 export async function getPartnerLeadAccess(authUserId: string): Promise<LeadAccessResult> {
   try {
     await assertPartnerSchemaReady();
-    const profile = await getPartnerProfileByAuthUserWithClient(getDatabase(), authUserId);
-    return evaluatePartnerLeadAccess(profile);
+    const sql = getDatabase();
+    const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
+    const agreementAcceptance = profile
+      ? await getCurrentAgreementAcceptanceWithClient(sql, profile.id)
+      : null;
+    return evaluatePartnerLeadAccess(profile, agreementAcceptance);
+  } catch (error) {
+    throw toPartnerDatabaseError(error);
+  }
+}
+
+export async function getPartnerAgreementState(authUserId: string) {
+  noStore();
+  try {
+    await assertPartnerSchemaReady();
+    const sql = getDatabase();
+    const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
+    const agreementAcceptance = profile
+      ? await getCurrentAgreementAcceptanceWithClient(sql, profile.id)
+      : null;
+
+    return { profile, agreementAcceptance };
   } catch (error) {
     throw toPartnerDatabaseError(error);
   }
@@ -248,6 +305,7 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
     if (!profile) {
       return {
         profile: null,
+        agreementAcceptance: null,
         leads: [],
         deals: [],
         commissions: [],
@@ -256,6 +314,8 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
         notifications: [],
       };
     }
+
+    const agreementAcceptance = await getCurrentAgreementAcceptanceWithClient(sql, profile.id);
 
     const leads = await sql`
       select
@@ -352,6 +412,7 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
     `;
     return {
       profile,
+      agreementAcceptance,
       leads: [...leads],
       deals: [...deals],
       commissions: [...commissions],
@@ -371,20 +432,42 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
     const sql = getDatabase();
     const platformCatalog = await getPlatformCatalog(sql);
     const partners = await sql`
-      select *
-      from public.partner_profiles
+      select
+        p.*,
+        paa.agreement_version as current_agreement_version,
+        paa.accepted_at as current_agreement_accepted_at
+      from public.partner_profiles p
+      left join lateral (
+        select agreement_version, accepted_at
+        from public.partner_agreement_acceptances
+        where partner_id = p.id
+          and agreement_version = ${REFERRAL_PARTNER_AGREEMENT_VERSION}
+        order by accepted_at desc
+        limit 1
+      ) paa on true
       order by created_at desc
       limit 200
     `;
     const applications = await sql`
       select
         a.*,
+        paa.agreement_version as current_agreement_version,
+        paa.accepted_at as current_agreement_accepted_at,
+        paa.agreement_sha256 as current_agreement_sha256,
         case
           when p.id is null then null
           else json_build_object('full_name', p.full_name, 'email', p.email, 'city', p.city)
         end as partner_profiles
       from public.partner_applications a
       left join public.partner_profiles p on p.id = a.partner_id
+      left join lateral (
+        select agreement_version, accepted_at, agreement_sha256
+        from public.partner_agreement_acceptances
+        where partner_id = a.partner_id
+          and agreement_version = ${REFERRAL_PARTNER_AGREEMENT_VERSION}
+        order by accepted_at desc
+        limit 1
+      ) paa on true
       order by a.submitted_at desc
       limit 200
     `;
@@ -567,6 +650,8 @@ export function pendingRowToApplicationInput(row: PendingPartnerApplicationRow):
     programTermsVersion: row.program_terms_version,
     programTermsAcceptedAt: row.program_terms_accepted_at,
     programContactConsentAt: row.program_contact_consent_at,
+    privacyNoticeVersion: row.privacy_notice_version,
+    privacyNoticeAcknowledgedAt: row.privacy_notice_acknowledged_at,
   };
 }
 
@@ -597,6 +682,8 @@ export async function savePendingPartnerApplication(input: PartnerApplicationInp
       program_terms_version,
       program_terms_accepted_at,
       program_contact_consent_at,
+      privacy_notice_version,
+      privacy_notice_acknowledged_at,
       status,
       updated_at
     )
@@ -622,6 +709,8 @@ export async function savePendingPartnerApplication(input: PartnerApplicationInp
       ${input.programTermsVersion},
       ${input.programTermsAcceptedAt},
       ${input.programContactConsentAt},
+      ${input.privacyNoticeVersion},
+      ${input.privacyNoticeAcknowledgedAt},
       'awaiting_email_confirmation',
       now()
     )
@@ -647,6 +736,8 @@ export async function savePendingPartnerApplication(input: PartnerApplicationInp
       program_terms_version = excluded.program_terms_version,
       program_terms_accepted_at = excluded.program_terms_accepted_at,
       program_contact_consent_at = excluded.program_contact_consent_at,
+      privacy_notice_version = excluded.privacy_notice_version,
+      privacy_notice_acknowledged_at = excluded.privacy_notice_acknowledged_at,
       status = 'awaiting_email_confirmation',
       auth_user_id = null,
       claimed_at = null,
@@ -763,6 +854,8 @@ export async function upsertPartnerApplication(authUserId: string, input: Partne
         program_terms_version,
         program_terms_accepted_at,
         program_contact_consent_at,
+        privacy_notice_version,
+        privacy_notice_acknowledged_at,
         status,
         submitted_at,
         updated_at
@@ -790,6 +883,8 @@ export async function upsertPartnerApplication(authUserId: string, input: Partne
         ${input.programTermsVersion},
         ${input.programTermsAcceptedAt},
         ${input.programContactConsentAt},
+        ${input.privacyNoticeVersion},
+        ${input.privacyNoticeAcknowledgedAt},
         'submitted',
         now(),
         now()
@@ -810,6 +905,62 @@ export async function upsertPartnerApplication(authUserId: string, input: Partne
   });
 }
 
+export async function acceptReferralPartnerAgreement(authUserId: string, acceptedEmail: string) {
+  await assertPartnerSchemaReady();
+  const sql = getDatabase();
+  const document = getCurrentReferralPartnerAgreementDocument();
+
+  return sql.begin(async (tx) => {
+    const profile = await getPartnerProfileForUpdate(tx, authUserId);
+
+    if (!profile) {
+      throw new Error('Complete your partner application before accepting the Referral Partner Agreement.');
+    }
+
+    if (profile.is_suspended) {
+      throw new Error('Agreement acceptance is unavailable while this partner account is suspended.');
+    }
+
+    if (!LEAD_ENABLED_APPLICATION_STATUSES.includes(profile.application_status as never)) {
+      throw new Error('Nom must approve your application before you can accept the Referral Partner Agreement.');
+    }
+
+    await tx`
+      insert into public.partner_agreement_acceptances (
+        partner_id,
+        auth_user_id,
+        accepted_email,
+        agreement_title,
+        agreement_version,
+        agreement_sha256,
+        agreement_text,
+        source_path,
+        accepted_at
+      )
+      values (
+        ${profile.id},
+        ${authUserId},
+        ${acceptedEmail},
+        ${document.title},
+        ${document.version},
+        ${document.sha256},
+        ${document.text},
+        '/partner/agreement',
+        now()
+      )
+      on conflict (partner_id, agreement_version) do nothing
+    `;
+
+    const acceptance = await getCurrentAgreementAcceptanceWithClient(tx, profile.id);
+    if (!acceptance) throw new Error('Failed to record the Referral Partner Agreement acceptance.');
+    if (acceptance.agreement_sha256 !== document.sha256) {
+      throw new Error('The stored agreement version does not match the current document. Contact Nom before submitting leads.');
+    }
+
+    return acceptance;
+  });
+}
+
 export async function createPartnerLead(
   authUserId: string,
   input: PartnerLeadInput
@@ -818,7 +969,11 @@ export async function createPartnerLead(
   const sql = getDatabase();
 
   return sql.begin(async (tx) => {
-    const profile = assertPartnerLeadAccess(await getPartnerProfileForUpdate(tx, authUserId));
+    const currentProfile = await getPartnerProfileForUpdate(tx, authUserId);
+    const agreementAcceptance = currentProfile
+      ? await getCurrentAgreementAcceptanceWithClient(tx, currentProfile.id)
+      : null;
+    const profile = assertPartnerLeadAccess(currentProfile, agreementAcceptance);
     let packageSnapshot: ReturnType<typeof buildRequestedPackageSnapshot> | null = null;
 
     if (input.requested_plan_id) {
@@ -962,7 +1117,11 @@ export async function createPartnerLead(
 export async function savePartnerPayoutMethod(authUserId: string, input: PartnerPayoutMethodInput) {
   await assertPartnerSchemaReady();
   const sql = getDatabase();
-  const profile = assertPartnerLeadAccess(await getPartnerProfileByAuthUserWithClient(sql, authUserId));
+  const currentProfile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
+  const agreementAcceptance = currentProfile
+    ? await getCurrentAgreementAcceptanceWithClient(sql, currentProfile.id)
+    : null;
+  const profile = assertPartnerLeadAccess(currentProfile, agreementAcceptance);
 
   await sql`
     insert into public.partner_payout_methods (

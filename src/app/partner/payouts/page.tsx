@@ -20,7 +20,7 @@ export default async function PartnerPayoutsPage({ searchParams }: { searchParam
     const params = await searchParams;
     const user = await requireUser('/partner/payouts');
     const dashboard = await getPartnerDashboard(user.id, user.email);
-    const access = evaluatePartnerLeadAccess(dashboard.profile);
+    const access = evaluatePartnerLeadAccess(dashboard.profile, dashboard.agreementAcceptance);
 
     return (
       <div>

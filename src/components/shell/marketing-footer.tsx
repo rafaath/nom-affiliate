@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { NOM_COMPANY } from '@/lib/company';
 
 export function MarketingFooter({ isSignedIn = false }: { isSignedIn?: boolean }) {
   return (
@@ -21,11 +22,23 @@ export function MarketingFooter({ isSignedIn = false }: { isSignedIn?: boolean }
               <Link href="/login">Partner login</Link>
             </>
           )}
-          <Link href="/#partner-terms">Program terms</Link>
+          <Link href="/application-terms">Application terms</Link>
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/referral-partner-agreement">Referral agreement</Link>
         </nav>
       </div>
       <div className="border-t border-white/20">
-        <div className="marketing-container py-5 font-mono text-xs text-white/65">© {new Date().getFullYear()} Nom Ventures LLP</div>
+        <div className="marketing-container grid gap-2 py-5 text-xs leading-5 text-white/70 md:grid-cols-[1fr_auto] md:items-end">
+          <div>
+            <p>
+              © {new Date().getFullYear()} {NOM_COMPANY.legalName} · LLPIN {NOM_COMPANY.llpin} · Registered with limited liability
+            </p>
+            <p className="mt-1 max-w-4xl">{NOM_COMPANY.registeredOffice}</p>
+          </div>
+          <a className="font-bold text-white" href={`mailto:${NOM_COMPANY.contactEmail}`}>
+            {NOM_COMPANY.contactEmail}
+          </a>
+        </div>
       </div>
     </footer>
   );

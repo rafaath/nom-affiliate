@@ -32,7 +32,7 @@ export default async function PartnerDashboardPage() {
     }
 
     const earnings = summarizeEarnings(dashboard.commissions);
-    const leadAccess = evaluatePartnerLeadAccess(dashboard.profile);
+    const leadAccess = evaluatePartnerLeadAccess(dashboard.profile, dashboard.agreementAcceptance);
     const gettingStartedSteps = [
       {
         label: 'Partner profile created',
@@ -41,10 +41,22 @@ export default async function PartnerDashboardPage() {
         actionLabel: 'View dashboard',
       },
       {
-        label: leadAccess.allowed ? 'Submit your first restaurant lead' : 'Wait for Nom approval',
+        label: leadAccess.allowed
+          ? 'Submit your first restaurant lead'
+          : leadAccess.code === 'agreement_required'
+            ? 'Accept the Referral Partner Agreement'
+            : 'Wait for Nom approval',
         complete: leadAccess.allowed,
-        href: leadAccess.allowed ? '/partner/leads' : '/partner',
-        actionLabel: leadAccess.allowed ? 'Submit a lead' : 'View approval state',
+        href: leadAccess.allowed
+          ? '/partner/leads'
+          : leadAccess.code === 'agreement_required'
+            ? '/partner/agreement'
+            : '/partner',
+        actionLabel: leadAccess.allowed
+          ? 'Submit a lead'
+          : leadAccess.code === 'agreement_required'
+            ? 'Review agreement'
+            : 'View approval state',
       },
       {
         label: 'Add payout details',

@@ -21,7 +21,7 @@ export default async function AdminPartnersPage() {
 
     return (
       <div>
-        <PageHeader eyebrow="Partner admin" title="Applications" description="Review applicant fit and preserve the recorded terms acceptance audit." />
+        <PageHeader eyebrow="Partner admin" title="Applications" description="Review applicant fit and verify application and partner-agreement records." />
       <Card>
         <CardHeader>
           <CardTitle>Partner application review</CardTitle>
@@ -77,7 +77,12 @@ export default async function AdminPartnersPage() {
                   { label: 'Submitted', value: formatDate(application.submitted_at) },
                   { label: 'Terms version', value: application.program_terms_version ?? 'Legacy submission' },
                   { label: 'Terms accepted', value: formatDate(application.program_terms_accepted_at) },
-                  { label: 'Contact consent recorded', value: formatDate(application.program_contact_consent_at) },
+                  { label: 'Privacy notice version', value: application.privacy_notice_version ?? 'Legacy submission' },
+                  { label: 'Privacy notice acknowledged', value: formatDate(application.privacy_notice_acknowledged_at) },
+                  { label: 'Operational contact acknowledged', value: formatDate(application.program_contact_consent_at) },
+                  { label: 'Referral agreement version', value: application.current_agreement_version ?? 'Not accepted' },
+                  { label: 'Referral agreement accepted', value: formatDate(application.current_agreement_accepted_at) },
+                  { label: 'Agreement fingerprint', value: application.current_agreement_sha256, wide: true },
                 ]}
               />
               <form action={reviewApplicationAction} className="mt-4 grid gap-3 xl:grid-cols-[1fr_1fr_auto] xl:items-end">

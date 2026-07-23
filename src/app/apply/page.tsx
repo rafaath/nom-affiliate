@@ -15,7 +15,8 @@ import { partnerTypeLabels } from '@/lib/partner-program/labels';
 import { PARTNER_TYPES } from '@/lib/partner-program/types';
 import { getCurrentUser } from '@/lib/supabase/auth';
 import { claimPendingPartnerApplication, getPartnerProfileByAuthUser } from '@/lib/partner-program/data';
-import { PARTNER_PROGRAM_TERMS_VERSION } from '@/lib/partner-program/terms';
+import { APPLICATION_TERMS_VERSION } from '@/lib/partner-program/terms';
+import { PARTNER_PRIVACY_NOTICE_VERSION } from '@/lib/partner-program/privacy-notice';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
 
 export default async function ApplyPage({
@@ -157,26 +158,35 @@ export default async function ApplyPage({
                 <Field label="How did you hear about this?" name="heardFrom" required />
               </div>
               <div className="rounded-lg border border-plum/15 bg-lilac/45 p-4">
-                <input type="hidden" name="programTermsVersion" value={PARTNER_PROGRAM_TERMS_VERSION} />
-                <label className="flex items-start gap-3 text-sm leading-6" htmlFor="programTermsAccepted">
+                <input type="hidden" name="applicationTermsVersion" value={APPLICATION_TERMS_VERSION} />
+                <label className="flex items-start gap-3 text-sm leading-6" htmlFor="applicationTermsAccepted">
                   <input
                     className="mt-1 size-4 shrink-0 accent-plum"
-                    id="programTermsAccepted"
-                    name="programTermsAccepted"
+                    id="applicationTermsAccepted"
+                    name="applicationTermsAccepted"
                     type="checkbox"
                     required
                   />
                   <span>
-                    I accept the{' '}
+                    I confirm that I am at least 18 and that the information above is accurate. I accept the{' '}
                     <Link
                       className="font-bold text-plum underline underline-offset-4"
-                      href="/#partner-terms"
+                      href="/application-terms"
                       rel="noreferrer"
                       target="_blank"
                     >
-                      Nom Partner Program Terms
+                      Partner Application Terms
                     </Link>{' '}
-                    and consent to Nom contacting me about this application. Version {PARTNER_PROGRAM_TERMS_VERSION}.
+                    and acknowledge the{' '}
+                    <Link
+                      className="font-bold text-plum underline underline-offset-4"
+                      href="/privacy"
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Partner Program Privacy Notice
+                    </Link>
+                    . Terms version {APPLICATION_TERMS_VERSION}; privacy version {PARTNER_PRIVACY_NOTICE_VERSION}.
                   </span>
                 </label>
               </div>

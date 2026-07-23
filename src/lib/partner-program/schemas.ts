@@ -7,7 +7,8 @@ import {
   type PartnerType,
   type ProductInterest,
 } from './types';
-import { PARTNER_PROGRAM_TERMS_VERSION } from './terms';
+import { APPLICATION_TERMS_VERSION } from './terms';
+import { REFERRAL_PARTNER_AGREEMENT_VERSION } from './referral-agreement';
 
 const requiredText = z.string().trim().min(1, 'Required');
 
@@ -48,10 +49,17 @@ export const partnerApplicationSchema = z.object({
   background: requiredText.max(1200),
   preferredLanguage: requiredText.max(80),
   heardFrom: requiredText.max(160),
-  programTermsVersion: z.literal(PARTNER_PROGRAM_TERMS_VERSION, {
-    error: 'Refresh this page and accept the current partner program terms.',
+  applicationTermsVersion: z.literal(APPLICATION_TERMS_VERSION, {
+    error: 'Refresh this page and accept the current application terms.',
   }),
-  programTermsAccepted: z.coerce.boolean().refine(Boolean, 'Accept the partner program terms to continue.'),
+  applicationTermsAccepted: z.coerce.boolean().refine(Boolean, 'Accept the application terms to continue.'),
+});
+
+export const referralPartnerAgreementAcceptanceSchema = z.object({
+  agreementVersion: z.literal(REFERRAL_PARTNER_AGREEMENT_VERSION, {
+    error: 'Refresh this page and review the current Referral Partner Agreement.',
+  }),
+  agreementAccepted: z.coerce.boolean().refine(Boolean, 'Accept the Referral Partner Agreement to continue.'),
 });
 
 export const partnerLeadSchema = z.object({

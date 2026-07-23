@@ -193,6 +193,18 @@ export type PartnerProfile = {
   created_at: string;
 };
 
+export type PartnerAgreementAcceptance = {
+  id: string;
+  partner_id: string;
+  auth_user_id: string;
+  accepted_email: string;
+  agreement_title: string;
+  agreement_version: string;
+  agreement_sha256: string;
+  accepted_at: string;
+  source_path: string;
+};
+
 export type PartnerLead = {
   id: string;
   partner_id: string;

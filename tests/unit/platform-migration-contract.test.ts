@@ -30,6 +30,10 @@ const profileLinksMigration = readFileSync(
   join(process.cwd(), 'supabase/migrations/20260721110000_add_partner_application_profile_links.sql'),
   'utf8'
 );
+const partnerAgreementMigration = readFileSync(
+  join(process.cwd(), 'supabase/migrations/20260723120000_add_referral_partner_agreement_acceptances.sql'),
+  'utf8'
+);
 
 describe('partner platform migration contract', () => {
   it('models onboarding requests, feature selections, attributions, and verification rules', () => {
@@ -111,5 +115,16 @@ describe('partner platform migration contract', () => {
     expect(profileLinksMigration).toContain('partner_applications_resume_drive_url_valid');
     expect(profileLinksMigration).not.toMatch(/add column[^,;]*(linkedin_profile_url|resume_drive_url)[^,;]*not null/i);
     expect(profileLinksMigration).not.toMatch(/update\s+public\.partner_(pending_)?applications/i);
+  });
+
+  it('stores immutable agreement snapshots and keeps new legal records server-written', () => {
+    expect(partnerAgreementMigration).toContain('create table public.partner_agreement_acceptances');
+    expect(partnerAgreementMigration).toContain('agreement_sha256 text not null');
+    expect(partnerAgreementMigration).toContain('agreement_text text not null');
+    expect(partnerAgreementMigration).toContain('privacy_notice_version text');
+    expect(partnerAgreementMigration).toContain('before update or delete');
+    expect(partnerAgreementMigration).toContain('append-only');
+    expect(partnerAgreementMigration).toContain('revoke all privileges on table public.partner_agreement_acceptances');
+    expect(partnerAgreementMigration).not.toMatch(/grant\s+(insert|update|delete|all privileges)[^;]*to authenticated/i);
   });
 });

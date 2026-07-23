@@ -6,6 +6,7 @@ import { assertPartnerSchemaReady, toPartnerDatabaseError } from '@/lib/db/clien
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/supabase/auth';
 import {
+  acceptReferralPartnerAgreement,
   createPartnerLead,
   getPartnerProfileByAuthUser,
   savePendingPartnerApplication,
@@ -20,8 +21,10 @@ import {
   partnerApplicationSchema,
   partnerLeadSchema,
   payoutMethodSchema,
+  referralPartnerAgreementAcceptanceSchema,
 } from '@/lib/partner-program/schemas';
-import { PARTNER_PROGRAM_TERMS_VERSION } from '@/lib/partner-program/terms';
+import { APPLICATION_TERMS_VERSION } from '@/lib/partner-program/terms';
+import { PARTNER_PRIVACY_NOTICE_VERSION } from '@/lib/partner-program/privacy-notice';
 
 function booleanFromForm(value: FormDataEntryValue | null) {
   return value === 'on' || value === 'true' || value === 'yes' || value === '1';
@@ -79,8 +82,8 @@ export async function submitApplicationAction(formData: FormData) {
     background: formData.get('background'),
     preferredLanguage: formData.get('preferredLanguage'),
     heardFrom: formData.get('heardFrom'),
-    programTermsVersion: formData.get('programTermsVersion'),
-    programTermsAccepted: booleanFromForm(formData.get('programTermsAccepted')),
+    applicationTermsVersion: formData.get('applicationTermsVersion'),
+    applicationTermsAccepted: booleanFromForm(formData.get('applicationTermsAccepted')),
   });
 
   if (!parsed.success) {
@@ -88,13 +91,20 @@ export async function submitApplicationAction(formData: FormData) {
   }
 
   const acceptedAt = new Date().toISOString();
-  const { programTermsAccepted: _programTermsAccepted, ...applicationFields } = parsed.data;
-  void _programTermsAccepted;
+  const {
+    applicationTermsAccepted: _applicationTermsAccepted,
+    applicationTermsVersion: _applicationTermsVersion,
+    ...applicationFields
+  } = parsed.data;
+  void _applicationTermsAccepted;
+  void _applicationTermsVersion;
   const applicationInput = {
     ...applicationFields,
-    programTermsVersion: PARTNER_PROGRAM_TERMS_VERSION,
+    programTermsVersion: APPLICATION_TERMS_VERSION,
     programTermsAcceptedAt: acceptedAt,
     programContactConsentAt: acceptedAt,
+    privacyNoticeVersion: PARTNER_PRIVACY_NOTICE_VERSION,
+    privacyNoticeAcknowledgedAt: acceptedAt,
   };
 
   try {
@@ -173,6 +183,32 @@ export async function submitApplicationAction(formData: FormData) {
 
   revalidatePath('/partner');
   redirect('/partner?applied=1');
+}
+
+export async function acceptReferralPartnerAgreementAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user) redirect('/login?returnTo=/partner/agreement');
+  if (!user.email) redirect('/partner/agreement?error=verified-email-required');
+
+  const parsed = referralPartnerAgreementAcceptanceSchema.safeParse({
+    agreementVersion: formData.get('agreementVersion'),
+    agreementAccepted: booleanFromForm(formData.get('agreementAccepted')),
+  });
+
+  if (!parsed.success) {
+    redirect(`/partner/agreement?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Review and accept the current agreement.')}`);
+  }
+
+  try {
+    await acceptReferralPartnerAgreement(user.id, user.email);
+  } catch (error) {
+    redirect(`/partner/agreement?error=${encodeURIComponent(error instanceof Error ? error.message : 'Unable to record agreement acceptance.')}`);
+  }
+
+  revalidatePath('/partner');
+  revalidatePath('/partner/agreement');
+  revalidatePath('/partner/leads');
+  redirect('/partner/agreement?accepted=1');
 }
 
 export async function submitLeadAction(formData: FormData) {

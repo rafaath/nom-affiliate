@@ -43,7 +43,7 @@ export default async function PartnerLeadsPage({
         />
       );
     }
-    const leadAccess = evaluatePartnerLeadAccess(dashboard.profile);
+    const leadAccess = evaluatePartnerLeadAccess(dashboard.profile, dashboard.agreementAcceptance);
     if (!leadAccess.allowed) {
       return (
         <div className="grid gap-7">

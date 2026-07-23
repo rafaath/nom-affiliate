@@ -1,13 +1,16 @@
 import {
   LEAD_ENABLED_APPLICATION_STATUSES,
   type ApplicationStatus,
+  type PartnerAgreementAcceptance,
   type PartnerProfile,
 } from './types';
+import { REFERRAL_PARTNER_AGREEMENT_VERSION } from './referral-agreement';
 
 export const LEAD_ACCESS_ERROR_CODES = [
   'profile_required',
   'approval_required',
   'partner_suspended',
+  'agreement_required',
 ] as const;
 
 export type LeadAccessErrorCode = (typeof LEAD_ACCESS_ERROR_CODES)[number];
@@ -33,7 +36,10 @@ export class PartnerLeadAccessError extends Error {
   }
 }
 
-export function evaluatePartnerLeadAccess(profile: PartnerProfile | null): LeadAccessResult {
+export function evaluatePartnerLeadAccess(
+  profile: PartnerProfile | null,
+  agreementAcceptance: PartnerAgreementAcceptance | null = null
+): LeadAccessResult {
   if (!profile) {
     return {
       allowed: false,
@@ -66,11 +72,23 @@ export function evaluatePartnerLeadAccess(profile: PartnerProfile | null): LeadA
     };
   }
 
+  if (agreementAcceptance?.agreement_version !== REFERRAL_PARTNER_AGREEMENT_VERSION) {
+    return {
+      allowed: false,
+      code: 'agreement_required',
+      message: 'Review and accept the current Referral Partner Agreement before submitting restaurant leads.',
+      profile,
+    };
+  }
+
   return { allowed: true, profile };
 }
 
-export function assertPartnerLeadAccess(profile: PartnerProfile | null): PartnerProfile {
-  const result = evaluatePartnerLeadAccess(profile);
+export function assertPartnerLeadAccess(
+  profile: PartnerProfile | null,
+  agreementAcceptance: PartnerAgreementAcceptance | null = null
+): PartnerProfile {
+  const result = evaluatePartnerLeadAccess(profile, agreementAcceptance);
   if (!result.allowed) throw new PartnerLeadAccessError(result.code, result.message);
   return result.profile;
 }

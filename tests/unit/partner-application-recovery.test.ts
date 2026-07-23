@@ -25,6 +25,8 @@ const pendingApplication: PendingPartnerApplicationRow = {
   program_terms_version: '2026-07-21-v1',
   program_terms_accepted_at: '2026-07-21T09:00:00.000Z',
   program_contact_consent_at: '2026-07-21T09:00:00.000Z',
+  privacy_notice_version: '2026-07-23-v1',
+  privacy_notice_acknowledged_at: '2026-07-23T09:00:00.000Z',
 };
 
 describe('pending partner application recovery', () => {
@@ -35,6 +37,8 @@ describe('pending partner application recovery', () => {
       programTermsVersion: pendingApplication.program_terms_version,
       programTermsAcceptedAt: pendingApplication.program_terms_accepted_at,
       programContactConsentAt: pendingApplication.program_contact_consent_at,
+      privacyNoticeVersion: pendingApplication.privacy_notice_version,
+      privacyNoticeAcknowledgedAt: pendingApplication.privacy_notice_acknowledged_at,
     });
   });
 

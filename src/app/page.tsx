@@ -19,13 +19,7 @@ import {
 } from 'lucide-react';
 import { MarketingFooter } from '@/components/shell/marketing-footer';
 import { MarketingHeader } from '@/components/shell/marketing-header';
-import { AnchoredDetails } from '@/components/program/anchored-details';
 import { Button } from '@/components/ui/button';
-import {
-  PARTNER_PROGRAM_TERMS_EFFECTIVE_DATE,
-  PARTNER_PROGRAM_TERMS_VERSION,
-  partnerProgramTerms,
-} from '@/lib/partner-program/terms';
 import { getCurrentUser } from '@/lib/supabase/auth';
 
 const audiences: Array<{ title: string; description: string; Icon: LucideIcon }> = [
@@ -257,27 +251,24 @@ export default async function HomePage() {
 
         <section id="partner-terms" className="marketing-section scroll-mt-20">
           <div className="marketing-container max-w-5xl">
-            <div>
-              <p className="marketing-eyebrow text-success">Program terms</p>
-              <h2 className="marketing-title mt-6">The important details.</h2>
+            <SectionHeading eyebrow="Clear from the start" title="Know what you’re agreeing to." />
+            <div className="mt-9 grid gap-3 md:grid-cols-3">
+              <LegalLink
+                href="/application-terms"
+                label="When you apply"
+                title="Application terms"
+              />
+              <LegalLink
+                href="/privacy"
+                label="How data is handled"
+                title="Privacy notice"
+              />
+              <LegalLink
+                href="/referral-partner-agreement"
+                label="After approval"
+                title="Referral agreement"
+              />
             </div>
-            <AnchoredDetails anchorId="partner-terms" className="group mt-9 rounded-lg border border-plum/20 bg-white px-5 sm:px-7">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-6 font-display text-xl font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                Read the program terms
-                <ChevronDown className="size-5 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
-              </summary>
-              <p className="border-t border-plum/15 py-5 text-sm text-ink-body">
-                Version {PARTNER_PROGRAM_TERMS_VERSION} · Effective {PARTNER_PROGRAM_TERMS_EFFECTIVE_DATE}
-              </p>
-              <div>
-                {partnerProgramTerms.map((term, index) => (
-                  <article className="grid gap-3 border-t border-plum/15 py-5 sm:grid-cols-[3rem_1fr]" key={term.title}>
-                    <span className="font-mono text-xs font-bold text-muted-foreground">{String(index + 1).padStart(2, '0')}</span>
-                    <div><h3 className="font-display text-xl font-bold">{term.title}</h3><p className="mt-2 text-sm leading-7 text-ink-body">{term.body}</p></div>
-                  </article>
-                ))}
-              </div>
-            </AnchoredDetails>
           </div>
         </section>
 
@@ -299,6 +290,18 @@ export default async function HomePage() {
       </main>
       <MarketingFooter isSignedIn={Boolean(currentUser)} />
     </div>
+  );
+}
+
+function LegalLink({ href, label, title }: { href: string; label: string; title: string }) {
+  return (
+    <Link className="group rounded-lg border border-plum/20 bg-white p-6 transition hover:-translate-y-0.5 hover:border-plum/45" href={href}>
+      <p className="marketing-eyebrow text-success">{label}</p>
+      <p className="mt-7 flex items-center justify-between gap-3 font-display text-2xl font-bold">
+        {title}
+        <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+      </p>
+    </Link>
   );
 }
 

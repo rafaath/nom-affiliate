@@ -6,7 +6,7 @@ let partnerSchemaReady = false;
 let partnerPlatformSchemaReady = false;
 
 const partnerMigrationMessage =
-  'Partner database migrations are not fully applied. Apply the base partner migration, supabase/migrations/20260721100000_add_partner_program_terms_acceptance.sql, and supabase/migrations/20260721110000_add_partner_application_profile_links.sql before using partner signup, portal, or admin pages.';
+  'Partner database migrations are not fully applied. Apply the base partner migration and partner migrations through supabase/migrations/20260723120000_add_referral_partner_agreement_acceptances.sql before using partner signup, portal, or admin pages.';
 const partnerPlatformMigrationMessage =
   'Partner platform integration migrations are not applied. Apply supabase/migrations/20260524090000_partner_platform_integration.sql and supabase/migrations/20260524100000_affiliate_requested_package_flow.sql after the base partner migration before using platform-native lead review, setup verification, onboarding requests, commission approval, or affiliate package selection.';
 
@@ -54,6 +54,7 @@ export async function assertPartnerSchemaReady() {
       to_regclass('public.partner_leads') as partner_leads,
       to_regclass('public.partner_deals') as partner_deals,
       to_regclass('public.partner_commissions') as partner_commissions,
+      to_regclass('public.partner_agreement_acceptances') as partner_agreement_acceptances,
       exists (
         select 1
         from information_schema.columns
@@ -89,7 +90,25 @@ export async function assertPartnerSchemaReady() {
           and column_name in ('linkedin_profile_url', 'resume_drive_url')
         group by table_schema, table_name
         having count(*) = 2
-      ) as partner_pending_application_profile_link_columns
+      ) as partner_pending_application_profile_link_columns,
+      exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'partner_applications'
+          and column_name in ('privacy_notice_version', 'privacy_notice_acknowledged_at')
+        group by table_schema, table_name
+        having count(*) = 2
+      ) as partner_application_privacy_columns,
+      exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'partner_pending_applications'
+          and column_name in ('privacy_notice_version', 'privacy_notice_acknowledged_at')
+        group by table_schema, table_name
+        having count(*) = 2
+      ) as partner_pending_application_privacy_columns
   `;
   const row = rows[0] as
     | {
@@ -100,10 +119,13 @@ export async function assertPartnerSchemaReady() {
         partner_leads: string | null;
         partner_deals: string | null;
         partner_commissions: string | null;
+        partner_agreement_acceptances: string | null;
         partner_application_terms_columns: boolean;
         partner_pending_application_terms_columns: boolean;
         partner_application_profile_link_columns: boolean;
         partner_pending_application_profile_link_columns: boolean;
+        partner_application_privacy_columns: boolean;
+        partner_pending_application_privacy_columns: boolean;
       }
     | undefined;
 

@@ -1,45 +1,35 @@
-export const PARTNER_PROGRAM_TERMS_VERSION = '2026-07-21-v1' as const;
-export const PARTNER_PROGRAM_TERMS_EFFECTIVE_DATE = '21 July 2026';
+export const APPLICATION_TERMS_VERSION = '2026-07-23-v1' as const;
+export const APPLICATION_TERMS_EFFECTIVE_DATE = '23 July 2026';
 
-export const partnerProgramTerms = [
+export const applicationTerms = [
   {
-    title: 'Application and approval',
+    title: 'Application only',
     body:
-      'Submitting an application does not make you an approved partner, employee, agent, or reseller. Nom may approve, decline, defer, or request more information, and lead submission remains unavailable until approval.',
+      'Submitting this form asks Nom to review you for its partner program. It does not approve you, appoint you as a partner, or allow you to submit restaurant leads. Nom may approve, decline, defer, or request more information.',
   },
   {
-    title: 'Qualified opportunities',
+    title: 'Your information',
     body:
-      'Only genuine restaurant opportunities submitted through the approved portal are eligible. Duplicate, existing, fabricated, incomplete, self-referred, or unauthorized contacts may be rejected. The restaurant must have agreed to be contacted.',
+      'You confirm that the application is accurate and that links or documents you provide are yours to share. You will tell Nom if important application information changes.',
   },
   {
-    title: 'Commission paths',
+    title: 'Capacity and authority',
     body:
-      'Referral, sales, setup, recurring, add-on, bonus, or custom commissions depend on the active portal rule or a written offer. A submission or introduction alone does not create an earned commission.',
+      'You confirm that you are at least 18 years old, legally competent to make this application, and, if applying for an organisation, authorised to apply on its behalf.',
   },
   {
-    title: 'Validation and payout',
+    title: 'Account and review',
     body:
-      'Commission records move through review, validation, approval, and payout states. Eligibility may depend on accepted attribution, cleared customer payment, completed setup, restaurant confirmation, required tax details, and the applicable written rule.',
+      'You must control the email address used for the application and keep your account secure. Nom may use the application to assess fit, prevent fraud and duplicate applications, and administer its review.',
   },
   {
-    title: 'Conduct and brand use',
+    title: 'Privacy and application contact',
     body:
-      'Partners must use current Nom material, describe the product and pricing accurately, protect confidential information, and never collect money or bind Nom without written authority. Misrepresentation, spam, fraud, or brand misuse may lead to suspension or termination.',
+      'Nom handles application information as described in the Partner Program Privacy Notice. Nom may contact you by email, phone, or WhatsApp about your application, account, and approval process. This is not consent to unrelated promotional marketing.',
   },
   {
-    title: 'Contact and records',
+    title: 'Agreement after approval',
     body:
-      'You confirm that the application is accurate and authorize Nom to use it to assess program fit, prevent fraud and duplicates, operate the program, and contact you by email, phone, or WhatsApp about your application and participation.',
-  },
-  {
-    title: 'Independent relationship',
-    body:
-      'Participation is non-exclusive and independent. You have no authority to negotiate for, employ on behalf of, or otherwise bind Nom. Nom does not guarantee approval, lead acceptance, sales volume, earnings, or any business outcome.',
-  },
-  {
-    title: 'Changes and ending participation',
-    body:
-      'Nom may update or pause the program and communicate material changes. Either party may end participation; brand-use rights then end immediately, while valid approved amounts remain subject to the applicable rule and legal requirements.',
+      'If Nom approves you, you must separately accept the current Referral Partner Agreement before submitting leads or earning commissions. Approval does not create employment, agency, franchise, or authority to bind Nom.',
   },
 ] as const;

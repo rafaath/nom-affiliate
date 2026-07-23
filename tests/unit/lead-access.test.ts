@@ -4,8 +4,10 @@ import {
   APPLICATION_STATUSES,
   LEAD_ENABLED_APPLICATION_STATUSES,
   type ApplicationStatus,
+  type PartnerAgreementAcceptance,
   type PartnerProfile,
 } from '@/lib/partner-program/types';
+import { REFERRAL_PARTNER_AGREEMENT_VERSION } from '@/lib/partner-program/referral-agreement';
 
 function profile(applicationStatus: ApplicationStatus, suspended = false): PartnerProfile {
   return {
@@ -28,9 +30,21 @@ function profile(applicationStatus: ApplicationStatus, suspended = false): Partn
   };
 }
 
+const currentAcceptance: PartnerAgreementAcceptance = {
+  id: 'acceptance-id',
+  partner_id: 'partner-id',
+  auth_user_id: 'user-id',
+  accepted_email: 'partner@example.com',
+  agreement_title: 'Nom Referral Partner Agreement',
+  agreement_version: REFERRAL_PARTNER_AGREEMENT_VERSION,
+  agreement_sha256: 'a'.repeat(64),
+  accepted_at: '2026-07-23T00:00:00.000Z',
+  source_path: '/partner/agreement',
+};
+
 describe('partner lead access', () => {
   it.each(LEAD_ENABLED_APPLICATION_STATUSES)('allows %s', (status) => {
-    expect(evaluatePartnerLeadAccess(profile(status))).toMatchObject({ allowed: true });
+    expect(evaluatePartnerLeadAccess(profile(status), currentAcceptance)).toMatchObject({ allowed: true });
   });
 
   it.each(APPLICATION_STATUSES.filter((status) => !LEAD_ENABLED_APPLICATION_STATUSES.includes(status as never)))(
@@ -44,9 +58,23 @@ describe('partner lead access', () => {
   );
 
   it.each(LEAD_ENABLED_APPLICATION_STATUSES)('blocks suspended %s partners', (status) => {
-    expect(evaluatePartnerLeadAccess(profile(status, true))).toMatchObject({
+    expect(evaluatePartnerLeadAccess(profile(status, true), currentAcceptance)).toMatchObject({
       allowed: false,
       code: 'partner_suspended',
+    });
+  });
+
+  it.each(LEAD_ENABLED_APPLICATION_STATUSES)('requires the current agreement for %s partners', (status) => {
+    expect(evaluatePartnerLeadAccess(profile(status), null)).toMatchObject({
+      allowed: false,
+      code: 'agreement_required',
+    });
+    expect(evaluatePartnerLeadAccess(profile(status), {
+      ...currentAcceptance,
+      agreement_version: '2026-01-01-v1',
+    })).toMatchObject({
+      allowed: false,
+      code: 'agreement_required',
     });
   });
 

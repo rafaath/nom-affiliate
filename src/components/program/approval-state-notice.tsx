@@ -1,9 +1,16 @@
-import { Clock3, ShieldAlert } from 'lucide-react';
+import Link from 'next/link';
+import { Clock3, FileSignature, ShieldAlert } from 'lucide-react';
 import type { LeadAccessResult } from '@/lib/partner-program/lead-access';
+import { Button } from '@/components/ui/button';
 import { StatusBadge } from './status-badge';
 
 export function ApprovalStateNotice({ access }: { access: Exclude<LeadAccessResult, { allowed: true }> }) {
-  const Icon = access.code === 'partner_suspended' ? ShieldAlert : Clock3;
+  const Icon =
+    access.code === 'partner_suspended'
+      ? ShieldAlert
+      : access.code === 'agreement_required'
+        ? FileSignature
+        : Clock3;
   return (
     <div className="rounded-lg border border-plum/20 bg-lilac/45 p-5" role="status">
       <div className="flex flex-wrap items-start gap-3">
@@ -17,6 +24,11 @@ export function ApprovalStateNotice({ access }: { access: Exclude<LeadAccessResu
           </div>
           <p className="mt-2 text-sm leading-6 text-ink-body">{access.message}</p>
           <p className="mt-1 text-sm text-ink-body">You can still review your existing leads, deals, commissions, and payout history.</p>
+          {access.code === 'agreement_required' ? (
+            <Button className="mt-4" asChild>
+              <Link href="/partner/agreement">Review and accept agreement</Link>
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>
