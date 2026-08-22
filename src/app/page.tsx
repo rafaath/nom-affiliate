@@ -155,12 +155,12 @@ export default async function HomePage() {
 
             <div className="relative min-h-[30rem] overflow-hidden rounded-lg border border-white/15 lg:col-span-6 lg:min-h-[38rem]">
               <Image
-                alt="Restaurant operator reviewing Nom with a technology advisor"
+                alt="Nom affiliate reviewing restaurant opportunities"
                 className="object-cover"
                 fill
                 priority
                 sizes="(min-width: 1024px) 50vw, 100vw"
-                src="/partner-restaurant-hero.png"
+                src="/partner-affiliate-hero.png"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-plum via-plum/10 to-transparent" />
               <div className="absolute inset-x-5 bottom-5 rounded-lg bg-lilac p-5 text-plum sm:inset-x-7 sm:bottom-7 sm:p-6">
