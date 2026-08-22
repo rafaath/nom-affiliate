@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Shared Amazon SES domain identity for nom.enterprises applications.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: nom.enterprises
+    Description: Shared SES sending domain.
+    AllowedPattern: '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+
+Resources:
+  DomainIdentity:
+    Type: AWS::SES::EmailIdentity
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      EmailIdentity: !Ref DomainName
+      DkimAttributes:
+        SigningEnabled: true
+      MailFromAttributes:
+        BehaviorOnMxFailure: REJECT_MESSAGE
+        MailFromDomain: !Sub 'mail.${DomainName}'
+      Tags:
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: Scope
+          Value: Shared
+
+Outputs:
+  IdentityArn:
+    Description: Shared SES identity ARN that app-specific stacks can authorize.
+    Value: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${DomainName}'
+  DkimRecordName1:
+    Description: First DKIM CNAME record name.
+    Value: !GetAtt DomainIdentity.DkimDNSTokenName1
+  DkimRecordValue1:
+    Description: First DKIM CNAME record value.
+    Value: !GetAtt DomainIdentity.DkimDNSTokenValue1
+  DkimRecordName2:
+    Description: Second DKIM CNAME record name.
+    Value: !GetAtt DomainIdentity.DkimDNSTokenName2
+  DkimRecordValue2:
+    Description: Second DKIM CNAME record value.
+    Value: !GetAtt DomainIdentity.DkimDNSTokenValue2
+  DkimRecordName3:
+    Description: Third DKIM CNAME record name.
+    Value: !GetAtt DomainIdentity.DkimDNSTokenName3
+  DkimRecordValue3:
+    Description: Third DKIM CNAME record value.
+    Value: !GetAtt DomainIdentity.DkimDNSTokenValue3
+  MailFromMxRecordName:
+    Description: Custom MAIL FROM MX record name.
+    Value: !Sub 'mail.${DomainName}'
+  MailFromMxRecordValue:
+    Description: Custom MAIL FROM MX record value.
+    Value: !Sub '10 feedback-smtp.${AWS::Region}.amazonses.com'
+  MailFromSpfRecordName:
+    Description: Custom MAIL FROM SPF TXT record name.
+    Value: !Sub 'mail.${DomainName}'
+  MailFromSpfRecordValue:
+    Description: Custom MAIL FROM SPF TXT record value.
+    Value: 'v=spf1 include:amazonses.com -all'
+  DmarcRecordName:
+    Description: Monitoring-only DMARC TXT record name.
+    Value: !Sub '_dmarc.${DomainName}'
+  DmarcRecordValue:
+    Description: Monitoring-only DMARC TXT record value.
+    Value: 'v=DMARC1; p=none;'
+  SesRegion:
+    Description: SES Region used by all consumers of this identity.
+    Value: !Ref AWS::Region

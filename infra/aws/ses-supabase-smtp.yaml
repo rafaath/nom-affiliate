@@ -1,0 +1,66 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Least-privilege SES SMTP principal for Nom Affiliate Supabase Auth.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: nom.enterprises
+    Description: Shared SES domain identity created by the shared SES stack.
+    AllowedPattern: '^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+  SenderAddress:
+    Type: String
+    Default: hello@nom.enterprises
+    Description: The only From address this SMTP principal may use.
+    AllowedPattern: '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+
+Resources:
+  SmtpSendingGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      Path: /ses-smtp/
+      Policies:
+        - PolicyName: SendOnlyFromApprovedAddress
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: SendAffiliateAuthEmail
+                Effect: Allow
+                Action: ses:SendRawEmail
+                Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${DomainName}'
+                Condition:
+                  StringEquals:
+                    ses:FromAddress: !Ref SenderAddress
+
+  SmtpUser:
+    Type: AWS::IAM::User
+    Properties:
+      Path: /ses-smtp/
+      Groups:
+        - !Ref SmtpSendingGroup
+      Tags:
+        - Key: Application
+          Value: NomAffiliate
+        - Key: Consumer
+          Value: SupabaseAuth
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  SmtpIamUserName:
+    Description: IAM user for the app-specific SES SMTP credentials.
+    Value: !Ref SmtpUser
+  SmtpIamUserArn:
+    Description: IAM user ARN for auditing and credential rotation.
+    Value: !GetAtt SmtpUser.Arn
+  SmtpHost:
+    Description: Supabase custom SMTP host.
+    Value: !Sub 'email-smtp.${AWS::Region}.amazonaws.com'
+  SmtpPort:
+    Description: Supabase custom SMTP port using STARTTLS.
+    Value: '587'
+  SenderAddress:
+    Description: Supabase sender email address.
+    Value: !Ref SenderAddress
+  SesRegion:
+    Description: Region used to derive the SES SMTP password.
+    Value: !Ref AWS::Region

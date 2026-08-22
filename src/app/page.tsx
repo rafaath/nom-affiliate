@@ -136,7 +136,7 @@ export default async function HomePage() {
         <section className="bg-plum text-paper">
           <div className="marketing-container grid gap-12 py-16 lg:grid-cols-12 lg:items-center lg:py-24">
             <div className="lg:col-span-6">
-              <p className="marketing-eyebrow text-lime">Nom partner program</p>
+              <p className="marketing-eyebrow text-lilac">Nom partner program</p>
               <h1 className="marketing-display mt-7 max-w-[10ch] text-lilac">
                 Find restaurants. Earn with Nom.
               </h1>
@@ -144,7 +144,7 @@ export default async function HomePage() {
                 Use LinkedIn, local research, or your own network to find interested restaurants. Refer them to Nom and earn when eligible referrals succeed.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Button className="bg-lime text-plum hover:bg-gold" size="lg" asChild>
+                <Button className="bg-lilac text-plum hover:bg-white" size="lg" asChild>
                   <Link href={primaryAction.href}>{primaryAction.label} <ArrowRight className="size-4" aria-hidden="true" /></Link>
                 </Button>
                 <Button className="border-paper/40 text-paper hover:bg-white/10 hover:text-white" size="lg" variant="outline" asChild>
@@ -163,7 +163,7 @@ export default async function HomePage() {
                 src="/partner-restaurant-hero.png"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-plum via-plum/10 to-transparent" />
-              <div className="absolute inset-x-5 bottom-5 rounded-lg bg-lime p-5 text-plum sm:inset-x-7 sm:bottom-7 sm:p-6">
+              <div className="absolute inset-x-5 bottom-5 rounded-lg bg-lilac p-5 text-plum sm:inset-x-7 sm:bottom-7 sm:p-6">
                 <p className="marketing-eyebrow">Three simple steps</p>
                 <p className="mt-3 font-display text-3xl font-bold leading-none sm:text-4xl">Apply → refer → earn</p>
               </div>

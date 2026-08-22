@@ -76,6 +76,8 @@ Application privacy acknowledgement and immutable Referral Partner Agreement acc
 
 Do not run migrations from this app unless explicitly instructed. The database source of truth is Supabase project `wuryzsyfytlbrysfnwtj`.
 
+Production already contains the original partner tables without matching entries in its migration ledger. Do not replay the earlier partner migrations or run `supabase db push` from this partial migration directory against Production. Apply `supabase/migrations/20260731120000_reconcile_production_partner_schema.sql` as one new migration through the canonical shared-database migration workflow; it validates the existing baseline, adds the missing legal/security changes, and restores required partner seed data.
+
 ## Validation
 
 ```bash

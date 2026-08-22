@@ -25,6 +25,7 @@ import {
 } from '@/lib/partner-program/schemas';
 import { APPLICATION_TERMS_VERSION } from '@/lib/partner-program/terms';
 import { PARTNER_PRIVACY_NOTICE_VERSION } from '@/lib/partner-program/privacy-notice';
+import { shouldRedirectToExistingAccountAccess } from '@/lib/supabase/auth-flow';
 
 function booleanFromForm(value: FormDataEntryValue | null) {
   return value === 'on' || value === 'true' || value === 'yes' || value === '1';
@@ -43,6 +44,10 @@ function stringListFromForm(formData: FormData, key: string) {
 
 function applicationErrorRedirect(message: string): never {
   redirect(`/apply?error=${encodeURIComponent(message)}`);
+}
+
+function existingAccountAccessRedirect(): never {
+  redirect('/login?notice=application-saved');
 }
 
 function logApplicationIssue(message: string, details: Record<string, unknown>) {
@@ -147,22 +152,12 @@ export async function submitApplicationAction(formData: FormData) {
       applicationErrorRedirect(error.message);
     }
 
-    if (!data.user) {
-      logApplicationIssue('Supabase Auth signup returned no user and no error', {
+    if (!data.user || shouldRedirectToExistingAccountAccess(data.user)) {
+      logApplicationIssue('Supabase Auth signup requires existing-account access', {
         email,
         hasSession: Boolean(data.session),
       });
-      applicationErrorRedirect(
-        'Confirmation email sent. Confirm your email, log in, and your partner application will be linked automatically.'
-      );
-    }
-
-    if (data.user.identities?.length === 0) {
-      logApplicationIssue('Supabase Auth signup reported an existing email identity', {
-        email,
-        authUserId: data.user.id,
-      });
-      applicationErrorRedirect('Application saved. An account already exists for this email, so log in and it will be linked automatically.');
+      existingAccountAccessRedirect();
     }
 
     currentUser = { id: data.user.id, email: data.user.email ?? email };

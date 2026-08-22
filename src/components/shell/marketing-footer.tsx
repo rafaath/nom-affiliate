@@ -4,7 +4,7 @@ import { NOM_COMPANY } from '@/lib/company';
 
 export function MarketingFooter({ isSignedIn = false }: { isSignedIn?: boolean }) {
   return (
-    <footer className="bg-coral text-white">
+    <footer className="bg-plum text-white">
       <div className="marketing-container grid gap-10 py-12 md:grid-cols-[1fr_auto] md:items-end">
         <div>
           <Link href="/" className="inline-flex items-center gap-3 font-display text-2xl font-bold">
@@ -13,7 +13,7 @@ export function MarketingFooter({ isSignedIn = false }: { isSignedIn?: boolean }
           </Link>
           <p className="mt-5 max-w-xl text-sm leading-7 text-white/75">Find interested restaurants. Help them grow. Earn with Nom.</p>
         </div>
-        <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-bold">
+        <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-bold text-lilac [&_a]:transition-colors [&_a:hover]:text-white">
           {isSignedIn ? (
             <Link href="/partner">Partner portal</Link>
           ) : (

@@ -12,7 +12,7 @@ export async function MarketingHeader({ currentUser: providedUser }: { currentUs
     <>
       <header className="fixed inset-x-0 top-0 z-[70] border-b border-white/10 bg-plum text-paper">
         <div className="marketing-container flex h-[4.75rem] items-center justify-between gap-4">
-          <Link href="/" className="flex min-w-0 items-center gap-3 font-display text-xl font-bold tracking-tight">
+          <Link href="/" className="flex min-w-0 items-center gap-3 font-display text-xl font-bold tracking-tight text-white">
             <Image className="size-10 shrink-0" src="/nomnom-mark.svg" alt="" width={40} height={40} priority />
             <span className="hidden sm:inline">Nom Partner Program</span>
             <span className="sm:hidden">Nom Partners</span>
@@ -47,7 +47,7 @@ export async function MarketingHeader({ currentUser: providedUser }: { currentUs
                 <Button className="border-paper/35 text-paper hover:bg-white/10 hover:text-white" variant="outline" asChild>
                   <Link href="/login">Log in</Link>
                 </Button>
-                <Button className="hidden bg-lime text-plum hover:bg-gold sm:inline-flex" asChild>
+                <Button className="hidden bg-lilac text-plum hover:bg-white sm:inline-flex" asChild>
                   <Link href="/apply">Apply</Link>
                 </Button>
               </>

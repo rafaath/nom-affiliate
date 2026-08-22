@@ -34,6 +34,10 @@ const partnerAgreementMigration = readFileSync(
   join(process.cwd(), 'supabase/migrations/20260723120000_add_referral_partner_agreement_acceptances.sql'),
   'utf8'
 );
+const productionReconciliationMigration = readFileSync(
+  join(process.cwd(), 'supabase/migrations/20260731120000_reconcile_production_partner_schema.sql'),
+  'utf8'
+);
 
 describe('partner platform migration contract', () => {
   it('models onboarding requests, feature selections, attributions, and verification rules', () => {
@@ -126,5 +130,24 @@ describe('partner platform migration contract', () => {
     expect(partnerAgreementMigration).toContain('append-only');
     expect(partnerAgreementMigration).toContain('revoke all privileges on table public.partner_agreement_acceptances');
     expect(partnerAgreementMigration).not.toMatch(/grant\s+(insert|update|delete|all privileges)[^;]*to authenticated/i);
+  });
+
+  it('reconciles the existing production baseline without replaying destructive base DDL', () => {
+    expect(productionReconciliationMigration).toContain('partner_production_preflight');
+    expect(productionReconciliationMigration).toContain('partner_production_postflight');
+    expect(productionReconciliationMigration).toContain('alter column restaurant_type drop not null');
+    expect(productionReconciliationMigration).toContain('create table if not exists public.partner_agreement_acceptances');
+    expect(productionReconciliationMigration).not.toContain('create table public.partner_admins');
+    expect(productionReconciliationMigration).not.toMatch(/drop\s+table/i);
+  });
+
+  it('restores required production seeds and converges the server-write boundary', () => {
+    expect(productionReconciliationMigration).toContain('basic_affiliate_first_paid_month');
+    expect(productionReconciliationMigration).toContain('inventory.foundation.ready');
+    expect(productionReconciliationMigration).toContain("'Partner Rules'");
+    expect(productionReconciliationMigration).toContain('drop policy if exists partner_leads_owned');
+    expect(productionReconciliationMigration).toContain('partner_leads_owned_select');
+    expect(productionReconciliationMigration).toContain("has_table_privilege('authenticated', c.oid, 'INSERT')");
+    expect(productionReconciliationMigration).not.toMatch(/insert\s+into\s+public\.features/i);
   });
 });

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { submitApplicationAction } from '@/app/actions/partner';
 import { ErrorBanner } from '@/components/program/error-banner';
+import { NoticeBanner } from '@/components/program/notice-banner';
 import { FormDraftPersistence } from '@/components/program/form-draft-persistence';
 import { MarketingHeader } from '@/components/shell/marketing-header';
 import { MarketingFooter } from '@/components/shell/marketing-footer';
@@ -22,11 +23,15 @@ import { isSupabaseConfigError } from '@/lib/supabase/env';
 export default async function ApplyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string }>;
 }) {
   const params = await searchParams;
   const currentUser = await getCurrentUser();
   let errorMessage = params.error ?? null;
+  const noticeMessage =
+    params.notice === 'password-updated'
+      ? 'Your password was updated. We are linking any saved partner application to this account.'
+      : null;
 
   if (currentUser?.email) {
     try {
@@ -79,6 +84,7 @@ export default async function ApplyPage({
           </CardHeader>
           <CardContent>
             <ErrorBanner message={errorMessage} />
+            <NoticeBanner message={noticeMessage} />
             <form id="partner-application-form" action={submitApplicationAction} className="grid gap-5">
               <Field label="Full name" name="fullName" required />
               <div className="grid gap-5 md:grid-cols-2">
