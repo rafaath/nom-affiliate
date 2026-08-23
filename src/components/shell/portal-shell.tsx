@@ -70,6 +70,7 @@ function PortalNavigation({ navItems, pathname }: { navItems: NavItem[]; pathnam
             )}
             href={item.href as never}
             key={item.href}
+            prefetch={false}
           >
             <Icon className="size-4" aria-hidden="true" />
             {item.label}
@@ -82,7 +83,7 @@ function PortalNavigation({ navItems, pathname }: { navItems: NavItem[]; pathnam
 
 function Brand({ eyebrow, title, homeHref }: { eyebrow: string; title: string; homeHref: string }) {
   return (
-    <Link href={homeHref as never} className="flex min-w-0 items-center gap-3 text-white">
+    <Link href={homeHref as never} prefetch={false} className="flex min-w-0 items-center gap-3 text-white">
       <Image className="size-10 shrink-0" src="/nomnom-mark.svg" alt="" width={40} height={40} />
       <span className="min-w-0">
         <span className="block truncate font-mono text-[0.65rem] font-bold uppercase tracking-[0.16em] text-paper/60">{eyebrow}</span>

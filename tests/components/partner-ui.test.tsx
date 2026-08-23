@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AnchoredDetails } from '@/components/program/anchored-details';
 import { AdminRecordDetails } from '@/components/program/admin-record-details';
@@ -13,6 +14,17 @@ import type { PlatformCatalog } from '@/lib/partner-program/platform/types';
 import type { PartnerProfile } from '@/lib/partner-program/types';
 
 const { mockUsePathname } = vi.hoisted(() => ({ mockUsePathname: vi.fn(() => '/partner/leads') }));
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    prefetch,
+    ...props
+  }: AnchorHTMLAttributes<HTMLAnchorElement> & { children: ReactNode; prefetch?: boolean }) => (
+    <a {...props} data-prefetch={prefetch === false ? 'false' : 'true'}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('next/navigation', () => ({ usePathname: mockUsePathname }));
 vi.mock('@/app/actions/auth', () => ({ signOutAction: vi.fn() }));
 
@@ -99,6 +111,8 @@ describe('partner UI foundations', () => {
     );
 
     expect(screen.getAllByRole('link', { name: 'Leads' })[0]).toHaveAttribute('aria-current', 'page');
+    expect(screen.getAllByRole('link', { name: 'Dashboard' })[0]).toHaveAttribute('data-prefetch', 'false');
+    expect(screen.getAllByRole('link', { name: 'Leads' })[0]).toHaveAttribute('data-prefetch', 'false');
     expect(screen.getAllByRole('button', { name: /sign out/i })).toHaveLength(1);
     await user.click(screen.getByRole('button', { name: 'Open portal navigation' }));
     expect(screen.getByRole('dialog', { name: 'Portal navigation' })).toBeVisible();
