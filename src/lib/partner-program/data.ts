@@ -33,6 +33,8 @@ export type PartnerDashboard = {
   notifications: any[];
 };
 
+export type PartnerPageDataSection = Exclude<keyof PartnerDashboard, 'profile'>;
+
 export type PartnerSalesCatalog = {
   platformCatalog: Awaited<ReturnType<typeof getPlatformCatalog>>;
   commissionRules: any[];
@@ -275,11 +277,9 @@ export async function getPartnerLeadAccess(authUserId: string): Promise<LeadAcce
   }
 }
 
-export async function getPartnerAgreementState(authUserId: string) {
+export async function getPartnerAgreementState(authUserId: string, sql: SqlExecutor = getDatabase()) {
   noStore();
   try {
-    await assertPartnerSchemaReady();
-    const sql = getDatabase();
     const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
     const agreementAcceptance = profile
       ? await getCurrentAgreementAcceptanceWithClient(sql, profile.id)
@@ -291,11 +291,14 @@ export async function getPartnerAgreementState(authUserId: string) {
   }
 }
 
-export async function getPartnerDashboard(authUserId: string, authEmail?: string | null): Promise<PartnerDashboard> {
+export async function getPartnerPageData(
+  authUserId: string,
+  authEmail: string | null | undefined,
+  sections: readonly PartnerPageDataSection[],
+  sql: SqlExecutor = getDatabase()
+): Promise<PartnerDashboard> {
   noStore();
   try {
-    await assertPartnerPlatformSchemaReady();
-    const sql = getDatabase();
     let profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
 
     if (!profile && authEmail) {
@@ -315,9 +318,12 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
       };
     }
 
-    const agreementAcceptance = await getCurrentAgreementAcceptanceWithClient(sql, profile.id);
+    const requestedSections = new Set(sections);
+    const agreementAcceptance = requestedSections.has('agreementAcceptance')
+      ? await getCurrentAgreementAcceptanceWithClient(sql, profile.id)
+      : null;
 
-    const leads = await sql`
+    const leads = requestedSections.has('leads') ? await sql`
       select
         l.*,
         case
@@ -329,8 +335,8 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
       where l.partner_id = ${profile.id}
       order by l.created_at desc
       limit 100
-    `;
-    const deals = await sql`
+    ` : [];
+    const deals = requestedSections.has('deals') ? await sql`
       select
         d.*,
         case
@@ -363,8 +369,8 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
       where d.partner_id = ${profile.id}
       order by d.updated_at desc
       limit 100
-    `;
-    const commissions = await sql`
+    ` : [];
+    const commissions = requestedSections.has('commissions') ? await sql`
       select
         c.*,
         case when l.id is null then null else json_build_object('restaurant_name', l.restaurant_name) end as partner_leads,
@@ -375,8 +381,8 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
       where c.partner_id = ${profile.id}
       order by c.created_at desc
       limit 100
-    `;
-    const setupChecklists = await sql`
+    ` : [];
+    const setupChecklists = requestedSections.has('setupChecklists') ? await sql`
       select
         sc.*,
         case
@@ -395,21 +401,21 @@ export async function getPartnerDashboard(authUserId: string, authEmail?: string
       where sc.partner_id = ${profile.id}
       order by sc.updated_at desc
       limit 50
-    `;
-    const payoutMethods = await sql`
+    ` : [];
+    const payoutMethods = requestedSections.has('payoutMethods') ? await sql`
       select *
       from public.partner_payout_methods
       where partner_id = ${profile.id}
       order by created_at desc
       limit 10
-    `;
-    const notifications = await sql`
+    ` : [];
+    const notifications = requestedSections.has('notifications') ? await sql`
       select *
       from public.partner_notifications
       where partner_id = ${profile.id}
       order by created_at desc
       limit 30
-    `;
+    ` : [];
     return {
       profile,
       agreementAcceptance,

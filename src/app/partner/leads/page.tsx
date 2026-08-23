@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
-import { getPartnerDashboard } from '@/lib/partner-program/data';
+import { getPartnerPageData } from '@/lib/partner-program/data';
 import { formatCurrency } from '@/lib/partner-program/format';
 import { painPointLabels, productInterestLabels } from '@/lib/partner-program/labels';
 import { evaluatePartnerLeadAccess } from '@/lib/partner-program/lead-access';
@@ -32,7 +32,7 @@ export default async function PartnerLeadsPage({
   try {
     const params = await searchParams;
     const user = await requireUser('/partner/leads');
-    const dashboard = await getPartnerDashboard(user.id, user.email);
+    const dashboard = await getPartnerPageData(user.id, user.email, ['agreementAcceptance', 'leads']);
     if (!dashboard.profile) {
       return (
         <EmptyState

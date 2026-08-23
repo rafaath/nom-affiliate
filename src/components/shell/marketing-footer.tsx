@@ -15,7 +15,7 @@ export function MarketingFooter({ isSignedIn = false }: { isSignedIn?: boolean }
         </div>
         <nav aria-label="Footer navigation" className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-bold text-lilac [&_a]:transition-colors [&_a:hover]:text-white">
           {isSignedIn ? (
-            <Link href="/partner">Partner portal</Link>
+            <Link href="/partner" prefetch={false}>Partner portal</Link>
           ) : (
             <>
               <Link href="/apply">Apply</Link>

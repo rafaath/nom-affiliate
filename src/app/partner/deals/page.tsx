@@ -3,7 +3,7 @@ import { EmptyState } from '@/components/program/empty-state';
 import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getPartnerDashboard } from '@/lib/partner-program/data';
+import { getPartnerPageData } from '@/lib/partner-program/data';
 import { formatCurrency } from '@/lib/partner-program/format';
 import { requireUser } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
@@ -11,7 +11,7 @@ import { isSupabaseConfigError } from '@/lib/supabase/env';
 export default async function PartnerDealsPage() {
   try {
     const user = await requireUser('/partner/deals');
-    const dashboard = await getPartnerDashboard(user.id, user.email);
+    const dashboard = await getPartnerPageData(user.id, user.email, ['deals']);
 
     return (
       <div>

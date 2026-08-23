@@ -11,14 +11,20 @@ import { Progress } from '@/components/ui/progress';
 import { requireUser } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
 import { formatCurrency } from '@/lib/partner-program/format';
-import { getPartnerDashboard, summarizeEarnings } from '@/lib/partner-program/data';
+import { getPartnerPageData, summarizeEarnings } from '@/lib/partner-program/data';
 import { partnerTierLabels } from '@/lib/partner-program/labels';
 import { evaluatePartnerLeadAccess } from '@/lib/partner-program/lead-access';
 
 export default async function PartnerDashboardPage() {
   try {
     const user = await requireUser('/partner');
-    const dashboard = await getPartnerDashboard(user.id, user.email);
+    const dashboard = await getPartnerPageData(user.id, user.email, [
+      'agreementAcceptance',
+      'deals',
+      'commissions',
+      'setupChecklists',
+      'payoutMethods',
+    ]);
 
     if (!dashboard.profile) {
       return (

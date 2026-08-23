@@ -1,9 +1,21 @@
 import { cleanup, render, screen } from '@testing-library/react';
+import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MarketingHeader } from '@/components/shell/marketing-header';
 
 const { mockGetCurrentUser } = vi.hoisted(() => ({ mockGetCurrentUser: vi.fn() }));
 
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    prefetch,
+    ...props
+  }: AnchorHTMLAttributes<HTMLAnchorElement> & { children: ReactNode; prefetch?: boolean }) => (
+    <a {...props} data-prefetch={prefetch === false ? 'false' : 'true'}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock('@/lib/supabase/auth', () => ({ getCurrentUser: mockGetCurrentUser }));
 vi.mock('@/app/actions/auth', () => ({ signOutAction: vi.fn() }));
 
@@ -24,7 +36,10 @@ describe('MarketingHeader', () => {
     mockGetCurrentUser.mockResolvedValue({ id: 'user-id', email: 'partner@example.com' });
     render(await MarketingHeader());
 
-    expect(screen.getByRole('link', { name: 'Open partner portal' })).toHaveAttribute('href', '/partner');
+    expect(screen.getByRole('link', { name: 'Open partner portal' }))
+      .toHaveAttribute('href', '/partner');
+    expect(screen.getByRole('link', { name: 'Open partner portal' }))
+      .toHaveAttribute('data-prefetch', 'false');
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Log in' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Apply' })).not.toBeInTheDocument();

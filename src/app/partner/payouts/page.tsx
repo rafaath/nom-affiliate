@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
-import { getPartnerDashboard } from '@/lib/partner-program/data';
+import { getPartnerPageData } from '@/lib/partner-program/data';
 import { evaluatePartnerLeadAccess } from '@/lib/partner-program/lead-access';
 import { requireUser } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
@@ -19,7 +19,7 @@ export default async function PartnerPayoutsPage({ searchParams }: { searchParam
   try {
     const params = await searchParams;
     const user = await requireUser('/partner/payouts');
-    const dashboard = await getPartnerDashboard(user.id, user.email);
+    const dashboard = await getPartnerPageData(user.id, user.email, ['agreementAcceptance', 'payoutMethods']);
     const access = evaluatePartnerLeadAccess(dashboard.profile, dashboard.agreementAcceptance);
 
     return (

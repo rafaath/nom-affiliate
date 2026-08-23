@@ -2,14 +2,14 @@ import { ConfigRequired } from '@/components/program/config-required';
 import { EmptyState } from '@/components/program/empty-state';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getPartnerDashboard } from '@/lib/partner-program/data';
+import { getPartnerPageData } from '@/lib/partner-program/data';
 import { requireUser } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
 
 export default async function PartnerSetupPage() {
   try {
     const user = await requireUser('/partner/setup');
-    const dashboard = await getPartnerDashboard(user.id, user.email);
+    const dashboard = await getPartnerPageData(user.id, user.email, ['setupChecklists']);
 
     return (
       <div className="grid gap-6">

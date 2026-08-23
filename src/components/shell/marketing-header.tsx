@@ -34,7 +34,7 @@ export async function MarketingHeader({ currentUser: providedUser }: { currentUs
                   variant="outline"
                   asChild
                 >
-                  <Link href="/partner"><UserRound className="size-5" aria-hidden="true" /></Link>
+                  <Link href="/partner" prefetch={false}><UserRound className="size-5" aria-hidden="true" /></Link>
                 </Button>
                 <form action={signOutAction}>
                   <Button className="border-paper/35 text-paper hover:bg-white/10 hover:text-white" type="submit" variant="outline">

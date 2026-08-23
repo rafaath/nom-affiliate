@@ -145,7 +145,7 @@ export default async function HomePage() {
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Button className="bg-lilac text-plum hover:bg-white" size="lg" asChild>
-                  <Link href={primaryAction.href}>{primaryAction.label} <ArrowRight className="size-4" aria-hidden="true" /></Link>
+                  <Link href={primaryAction.href} prefetch={currentUser ? false : undefined}>{primaryAction.label} <ArrowRight className="size-4" aria-hidden="true" /></Link>
                 </Button>
                 <Button className="border-paper/40 text-paper hover:bg-white/10 hover:text-white" size="lg" variant="outline" asChild>
                   <Link href="#workflow">See how it works <ArrowDown className="size-4" aria-hidden="true" /></Link>
@@ -244,7 +244,7 @@ export default async function HomePage() {
               <h2 className="marketing-title mt-6 max-w-[12ch] text-lime">Help restaurants grow—and earn with Nom.</h2>
             </div>
             <div className="lg:col-span-4 lg:text-right">
-              <Button className="bg-lime text-plum hover:bg-gold" size="lg" asChild><Link href={primaryAction.href}>{currentUser ? 'Open your portal' : 'Start your application'} <ArrowRight className="size-4" /></Link></Button>
+              <Button className="bg-lime text-plum hover:bg-gold" size="lg" asChild><Link href={primaryAction.href} prefetch={currentUser ? false : undefined}>{currentUser ? 'Open your portal' : 'Start your application'} <ArrowRight className="size-4" /></Link></Button>
             </div>
           </div>
         </section>
