@@ -7,6 +7,7 @@ import {
   type SqlExecutor,
 } from '@/lib/db/client';
 import { z } from 'zod';
+import { calculateAnnualInvoiceBasis, calculateCommissionAmount, type CommissionRule } from './commission';
 import { getActivePlatformPlan, getDefaultPlatformPlan } from './platform/catalog';
 import { assertCommissionCanBeApproved, refreshCommissionEligibility } from './platform/commission-eligibility';
 import { createOnboardingRequestForDeal, syncDealFeatureSelections } from './platform/onboarding-requests';
@@ -56,6 +57,37 @@ export async function isPartnerAdmin(authUserId: string, email?: string | null) 
 
 async function resolvePlan(planId: string | null | undefined, sql: SqlExecutor) {
   return planId ? getActivePlatformPlan(planId, sql) : getDefaultPlatformPlan(sql);
+}
+
+type ActiveCommissionRule = CommissionRule & {
+  id: string;
+  code: string;
+  conditions: Record<string, unknown>;
+};
+
+async function getActiveAffiliateReferralRule(sql: SqlExecutor): Promise<ActiveCommissionRule> {
+  const rows = await sql`
+    select
+      id,
+      code,
+      commission_type,
+      fixed_amount_cents,
+      percent_bps,
+      validation_days,
+      currency_code,
+      conditions
+    from public.partner_commission_rules
+    where is_active = true
+      and partner_type = 'affiliate'
+      and commission_type = 'referral'
+      and active_from <= now()
+      and (active_until is null or active_until > now())
+    order by active_from desc, created_at desc
+    limit 1
+  `;
+  const rule = rows[0] as ActiveCommissionRule | undefined;
+  if (!rule) throw new Error('No active affiliate referral commission rule is configured.');
+  return rule;
 }
 
 async function upsertPlatformAttributionForDeal(dealId: string, sql: SqlExecutor) {
@@ -425,6 +457,7 @@ export async function updateDealStage(input: {
   stage: DealStage;
   note: string;
   expectedCommissionCents?: number;
+  annualSubscriptionPricePerBranchCents?: number;
   requestedPlanId?: string | null;
   requestedFeatureCodes?: string[];
   requestedBranchCount?: number;
@@ -434,8 +467,9 @@ export async function updateDealStage(input: {
 
   await sql.begin(async (tx) => {
     const previousRows = await tx`
-      select d.*, req.status as onboarding_request_status
+      select d.*, req.status as onboarding_request_status, p.partner_type::text as partner_type
       from public.partner_deals d
+      join public.partner_profiles p on p.id = d.partner_id
       left join public.partner_platform_onboarding_requests req on req.id = d.onboarding_request_id
       where d.id = ${input.dealId}
       limit 1
@@ -452,7 +486,7 @@ export async function updateDealStage(input: {
         'deal'
       );
     }
-    const approvedBranchCount = input.requestedBranchCount || previousDeal.requested_branch_count || 1;
+    const approvedBranchCount = input.requestedBranchCount || previousDeal.approval_package_snapshot?.branch_count || previousDeal.requested_branch_count || 1;
     const plan = input.requestedPlanId
       ? await getActivePlatformPlan(input.requestedPlanId, tx)
       : previousDeal.subscription_plan_id
@@ -460,6 +494,28 @@ export async function updateDealStage(input: {
         : await getDefaultPlatformPlan(tx);
     const requestedFeatureCodes = input.requestedFeatureCodes?.filter(Boolean) ?? [];
     const selectedFeatureCodes = requestedFeatureCodes.length > 0 ? requestedFeatureCodes : previousDeal.products_sold?.length ? previousDeal.products_sold : plan.feature_codes;
+
+    let affiliateCommissionRule: ActiveCommissionRule | null = null;
+    let affiliateCommissionBasisCents: number | null = null;
+    let affiliateCommissionAmountCents: number | null = null;
+    if (stageChanged && input.stage === 'won' && previousDeal.partner_type === 'affiliate') {
+      if (!input.annualSubscriptionPricePerBranchCents) {
+        throw new Error('Enter the paid annual subscription price per converted branch before marking this deal as won.');
+      }
+      affiliateCommissionRule = await getActiveAffiliateReferralRule(tx);
+      affiliateCommissionBasisCents = calculateAnnualInvoiceBasis(
+        input.annualSubscriptionPricePerBranchCents,
+        approvedBranchCount
+      );
+      affiliateCommissionAmountCents = calculateCommissionAmount(
+        affiliateCommissionRule,
+        affiliateCommissionBasisCents
+      );
+    }
+
+    const expectedCommissionCents = previousDeal.partner_type === 'affiliate'
+      ? affiliateCommissionAmountCents
+      : input.expectedCommissionCents;
 
     await syncDealFeatureSelections({
       dealId: input.dealId,
@@ -475,7 +531,7 @@ export async function updateDealStage(input: {
       set
         stage = ${input.stage},
         next_action = ${input.note || null},
-        expected_commission_cents = coalesce(${input.expectedCommissionCents ?? null}, expected_commission_cents),
+        expected_commission_cents = coalesce(${expectedCommissionCents ?? null}, expected_commission_cents),
         subscription_plan_id = ${plan.id},
         products_sold = ${selectedFeatureCodes},
         approval_package_snapshot = approval_package_snapshot || ${tx.json(toJsonValue({
@@ -486,6 +542,14 @@ export async function updateDealStage(input: {
           plan_name: plan.name,
           branch_count: approvedBranchCount,
           feature_codes: selectedFeatureCodes,
+          ...(affiliateCommissionRule
+            ? {
+                commission_rule_code: affiliateCommissionRule.code,
+                annual_subscription_price_per_branch_cents: input.annualSubscriptionPricePerBranchCents,
+                first_paid_annual_invoice_basis_cents: affiliateCommissionBasisCents,
+                one_time_commission_cents: affiliateCommissionAmountCents,
+              }
+            : {}),
         }))},
         won_at = case when ${stageChanged} and ${input.stage} = 'won' then now() else won_at end,
         lost_at = case when ${stageChanged} and ${input.stage} = 'lost' then now() else lost_at end,
@@ -529,23 +593,40 @@ export async function updateDealStage(input: {
           partner_id,
           lead_id,
           deal_id,
+          rule_id,
           commission_type,
           status,
           amount_cents,
           currency_code,
           condition_summary,
-          eligible_at
+          eligible_at,
+          metadata
         )
         select
           ${deal.partner_id},
           ${deal.lead_id},
           ${deal.id},
-          'referral',
+          ${affiliateCommissionRule?.id ?? null},
+          ${affiliateCommissionRule?.commission_type ?? 'referral'},
           'pending',
-          ${input.expectedCommissionCents ?? deal.expected_commission_cents ?? 0},
-          ${deal.currency_code || 'INR'},
-          'Pending validation after restaurant becomes a paying Nom customer.',
-          now() + interval '30 days'
+          ${affiliateCommissionAmountCents ?? input.expectedCommissionCents ?? deal.expected_commission_cents ?? 0},
+          ${affiliateCommissionRule?.currency_code ?? deal.currency_code ?? 'INR'},
+          ${affiliateCommissionRule
+            ? 'One-time commission on the first paid annual subscription invoice for each converted branch, pending payment validation.'
+            : 'Pending validation after restaurant becomes a paying Nom customer.'},
+          now() + (${affiliateCommissionRule?.validation_days ?? 30} * interval '1 day'),
+          ${tx.json(toJsonValue(affiliateCommissionRule
+            ? {
+                commission_rule_code: affiliateCommissionRule.code,
+                commission_basis: 'first_paid_annual_subscription_invoice',
+                commission_frequency: 'one_time',
+                commission_scope: 'per_converted_branch',
+                annual_subscription_price_per_branch_cents: input.annualSubscriptionPricePerBranchCents,
+                converted_branch_count: approvedBranchCount,
+                commission_basis_cents: affiliateCommissionBasisCents,
+                percent_bps: affiliateCommissionRule.percent_bps,
+              }
+            : {}))}
         where not exists (
           select 1
           from public.partner_commissions existing

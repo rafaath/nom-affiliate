@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { isPartnerAdmin } from '@/lib/partner-program/admin-data';
 import { createSupabaseServerClient } from './server';
+import { getGoogleSessionUser } from './google-session';
 
 export type CurrentUser = {
   id: string;
@@ -9,15 +10,15 @@ export type CurrentUser = {
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.auth.getUser();
+  const user = await getGoogleSessionUser(supabase);
 
-  if (error || !data.user) {
+  if (!user) {
     return null;
   }
 
   return {
-    id: data.user.id,
-    email: data.user.email ?? null,
+    id: user.id,
+    email: user.email ?? null,
   };
 }
 

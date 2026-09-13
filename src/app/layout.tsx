@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { League_Spartan, Manrope, Space_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import { Providers } from '@/providers/providers';
+import { GoogleAdsProvider } from '@/components/program/google-ads-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -45,7 +46,7 @@ export default function RootLayout({
     <html lang="en" className={`${manrope.variable} ${leagueSpartan.variable} ${spaceMono.variable}`}>
       <body>
         <Providers>
-          {children}
+          <GoogleAdsProvider>{children}</GoogleAdsProvider>
           <Toaster richColors closeButton position="top-right" />
         </Providers>
       </body>

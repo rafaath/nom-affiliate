@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { submitApplicationAction } from "@/app/actions/partner";
 import { ErrorBanner } from "@/components/program/error-banner";
-import { NoticeBanner } from "@/components/program/notice-banner";
 import { FormDraftPersistence } from "@/components/program/form-draft-persistence";
 import { GoogleSignInButton } from "@/components/program/google-sign-in-button";
 import { MarketingHeader } from "@/components/shell/marketing-header";
@@ -38,10 +37,6 @@ export default async function ApplyPage({
   const params = await searchParams;
   const currentUser = await getCurrentUser();
   let errorMessage = params.error ?? null;
-  const noticeMessage =
-    params.notice === "password-updated"
-      ? "Your password was updated. We are linking any saved partner application to this account."
-      : null;
 
   if (currentUser?.email) {
     try {
@@ -117,7 +112,6 @@ export default async function ApplyPage({
           </CardHeader>
           <CardContent>
             <ErrorBanner message={errorMessage} />
-            <NoticeBanner message={noticeMessage} />
             {!currentUser ? (
               <div className="grid gap-5">
                 <div className="rounded-lg border border-plum/15 bg-lilac/45 p-5">
@@ -135,14 +129,7 @@ export default async function ApplyPage({
                   label="Sign in with Google to apply"
                 />
                 <p className="text-center text-sm text-muted-foreground">
-                  Already have a Nom password account?{" "}
-                  <Link
-                    className="font-bold text-primary underline"
-                    href="/login?returnTo=%2Fapply"
-                  >
-                    Log in instead
-                  </Link>
-                  .
+                  Already have a Nom account? Continue with Google using the same email.
                 </p>
               </div>
             ) : (

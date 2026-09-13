@@ -9,6 +9,7 @@ export type PackageCommissionRule = {
   percent_bps: number | null;
   currency_code: string;
   validation_days: number;
+  conditions?: Record<string, unknown>;
 };
 
 export type RequestedPackageSnapshot = {
@@ -19,12 +20,15 @@ export type RequestedPackageSnapshot = {
   billing_period: string;
   branch_count: number;
   plan_price_cents: number;
+  subscription_value_cents: number;
+  /** @deprecated Kept for compatibility with the existing database column. */
   monthly_revenue_cents: number;
   feature_codes: string[];
   feature_labels: string[];
   summary: string;
   commission_preview_cents: number;
   commission_preview: {
+    available: boolean;
     rule_code: string | null;
     commission_type: string | null;
     fixed_amount_cents: number | null;
@@ -41,6 +45,10 @@ function unique(values: readonly string[]) {
 function normalizeBranchCount(value: number) {
   if (!Number.isFinite(value)) return 1;
   return Math.max(1, Math.min(500, Math.trunc(value)));
+}
+
+function isAnnualBillingPeriod(value: string) {
+  return ['annual', 'annually', 'year', 'yearly'].includes(value.trim().toLowerCase());
 }
 
 export function mergePlanAndRequestedFeatureCodes(plan: PlatformPlan, requestedFeatureCodes: readonly string[]) {
@@ -61,10 +69,10 @@ export function selectCommissionPreviewRule(
   return activeRules[0] ?? null;
 }
 
-export function estimateCommissionPreviewCents(rule: PackageCommissionRule | null, monthlyRevenueCents: number) {
+export function estimateCommissionPreviewCents(rule: PackageCommissionRule | null, subscriptionValueCents: number) {
   if (!rule) return 0;
   const fixed = rule.fixed_amount_cents ?? 0;
-  const percent = rule.percent_bps ? Math.round((monthlyRevenueCents * rule.percent_bps) / 10_000) : 0;
+  const percent = rule.percent_bps ? Math.round((subscriptionValueCents * rule.percent_bps) / 10_000) : 0;
   return Math.max(0, fixed + percent);
 }
 
@@ -80,9 +88,14 @@ export function buildRequestedPackageSnapshot(input: {
   const featureCodes = mergePlanAndRequestedFeatureCodes(input.plan, input.selectedFeatureCodes);
   const featureLabelsByCode = new Map(input.features.map((feature) => [feature.code, feature.label]));
   const featureLabels = featureCodes.map((code) => featureLabelsByCode.get(code) ?? code);
-  const monthlyRevenueCents = input.plan.price_cents * branchCount;
+  const subscriptionValueCents = input.plan.price_cents * branchCount;
   const rule = selectCommissionPreviewRule(input.commissionRules, input.partnerType);
-  const commissionPreviewCents = estimateCommissionPreviewCents(rule, monthlyRevenueCents);
+  const annualPlan = isAnnualBillingPeriod(input.plan.billing_period);
+  const annualInvoiceRule = rule?.conditions?.commission_basis === 'first_paid_annual_subscription_invoice';
+  const canPreview = Boolean(rule && (!annualInvoiceRule || annualPlan) && input.plan.price_cents > 0 && rule.currency_code === input.plan.currency_code);
+  const commissionPreviewCents = canPreview
+    ? estimateCommissionPreviewCents(rule, subscriptionValueCents)
+    : 0;
 
   return {
     plan_id: input.plan.id,
@@ -92,20 +105,28 @@ export function buildRequestedPackageSnapshot(input: {
     billing_period: input.plan.billing_period,
     branch_count: branchCount,
     plan_price_cents: input.plan.price_cents,
-    monthly_revenue_cents: monthlyRevenueCents,
+    subscription_value_cents: subscriptionValueCents,
+    monthly_revenue_cents: subscriptionValueCents,
     feature_codes: featureCodes,
     feature_labels: featureLabels,
     summary: `${input.plan.name} · ${branchCount} ${branchCount === 1 ? 'branch' : 'branches'} · ${featureCodes.length} capabilities`,
     commission_preview_cents: commissionPreviewCents,
     commission_preview: {
+      available: canPreview,
       rule_code: rule?.code ?? null,
       commission_type: rule?.commission_type ?? null,
       fixed_amount_cents: rule?.fixed_amount_cents ?? null,
       percent_bps: rule?.percent_bps ?? null,
       validation_days: rule?.validation_days ?? null,
-      explanation: rule
-        ? 'Preview only. Final payout requires admin approval, payment validation, and platform eligibility.'
-        : 'No active commission rule is configured for this partner type.',
+      explanation: !rule
+        ? 'No active commission rule is configured for this partner type.'
+        : annualInvoiceRule && !annualPlan
+          ? 'Commission preview needs an annual plan price. The selected catalog plan is not marked as annual.'
+          : !canPreview
+            ? 'Commission preview requires a paid plan price in the commission currency.'
+            : annualInvoiceRule
+              ? 'One-time preview of the first paid annual invoice for each converted branch. Final payout requires payment validation and approval.'
+              : 'Preview only. Final payout requires admin approval, payment validation, and platform eligibility.',
     },
   };
 }

@@ -70,6 +70,10 @@ export function canTransitionLead(from: LeadStatus, to: LeadStatus) {
   return leadTransitions[from].includes(to);
 }
 
+export function canPartnerModifyLead(status: LeadStatus) {
+  return status === 'submitted';
+}
+
 export function canTransitionDeal(from: DealStage, to: DealStage) {
   return dealTransitions[from].includes(to);
 }

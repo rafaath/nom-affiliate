@@ -19,6 +19,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 import {
   requestPasswordResetAction,
+  signInAction,
   signInWithGoogleAction,
   updatePasswordAction,
 } from "@/app/actions/auth";
@@ -27,7 +28,7 @@ function redirectError(path: string) {
   return new Error(`REDIRECT:${path}`);
 }
 
-describe("auth recovery actions", () => {
+describe("Google-only auth actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_APP_URL = "https://affiliate.nom.enterprises";
@@ -56,20 +57,21 @@ describe("auth recovery actions", () => {
     mocks.updateUser.mockResolvedValue({ error: null });
   });
 
-  it("sends recovery links back through the affiliate auth callback", async () => {
-    const formData = new FormData();
-    formData.set("email", "partner@example.com");
+  it("rejects legacy password login while preserving a safe destination", async () => {
+    const form = new FormData();
+    form.set("email", "partner@example.com");
+    form.set("password", "old-password");
+    form.set("returnTo", "/apply");
+    await expect(signInAction(form)).rejects.toThrow("REDIRECT:/login?notice=google-only&returnTo=%2Fapply");
+    expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
+  });
 
-    await expect(requestPasswordResetAction(formData)).rejects.toThrow(
-      "REDIRECT:/forgot-password?sent=1",
-    );
-    expect(mocks.resetPasswordForEmail).toHaveBeenCalledWith(
-      "partner@example.com",
-      {
-        redirectTo:
-          "https://affiliate.nom.enterprises/auth/callback?next=%2Freset-password",
-      },
-    );
+  it("does not send password reset emails or update shared passwords", async () => {
+    await expect(requestPasswordResetAction()).rejects.toThrow("REDIRECT:/login?notice=google-only");
+    await expect(updatePasswordAction()).rejects.toThrow("REDIRECT:/login?notice=google-only");
+    expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(mocks.resetPasswordForEmail).not.toHaveBeenCalled();
+    expect(mocks.updateUser).not.toHaveBeenCalled();
   });
 
   it("starts Google OAuth with a safe return path through the affiliate callback", async () => {
@@ -106,26 +108,4 @@ describe("auth recovery actions", () => {
     });
   });
 
-  it("does not call Supabase when the password confirmation is invalid", async () => {
-    const formData = new FormData();
-    formData.set("password", "new-password");
-    formData.set("passwordConfirmation", "different-password");
-
-    await expect(updatePasswordAction(formData)).rejects.toThrow(
-      "REDIRECT:/reset-password?error=The%20password%20confirmation%20does%20not%20match.",
-    );
-    expect(mocks.getUser).not.toHaveBeenCalled();
-    expect(mocks.updateUser).not.toHaveBeenCalled();
-  });
-
-  it("updates the authenticated recovery user and resumes application recovery", async () => {
-    const formData = new FormData();
-    formData.set("password", "new-password");
-    formData.set("passwordConfirmation", "new-password");
-
-    await expect(updatePasswordAction(formData)).rejects.toThrow(
-      "REDIRECT:/apply?notice=password-updated",
-    );
-    expect(mocks.updateUser).toHaveBeenCalledWith({ password: "new-password" });
-  });
 });

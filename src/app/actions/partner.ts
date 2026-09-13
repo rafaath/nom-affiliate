@@ -3,15 +3,16 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { assertPartnerSchemaReady, toPartnerDatabaseError } from '@/lib/db/client';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/supabase/auth';
 import {
   acceptReferralPartnerAgreement,
   createPartnerLead,
+  deletePartnerLead,
   getPartnerProfileByAuthUser,
-  savePendingPartnerApplication,
   savePartnerPayoutMethod,
+  updatePartnerLead,
   upsertPartnerApplication,
+  type PartnerLeadInput,
 } from '@/lib/partner-program/data';
 import {
   parsePainPoints,
@@ -19,13 +20,14 @@ import {
   parseProductInterests,
   parseRequestedFeatureCodes,
   partnerApplicationSchema,
+  partnerLeadIdSchema,
   partnerLeadSchema,
   payoutMethodSchema,
   referralPartnerAgreementAcceptanceSchema,
 } from '@/lib/partner-program/schemas';
 import { APPLICATION_TERMS_VERSION } from '@/lib/partner-program/terms';
 import { PARTNER_PRIVACY_NOTICE_VERSION } from '@/lib/partner-program/privacy-notice';
-import { shouldRedirectToExistingAccountAccess } from '@/lib/supabase/auth-flow';
+import { recordApplicationReceipt } from '@/lib/analytics/application-receipt.server';
 
 function booleanFromForm(value: FormDataEntryValue | null) {
   return value === 'on' || value === 'true' || value === 'yes' || value === '1';
@@ -46,27 +48,83 @@ function applicationErrorRedirect(message: string): never {
   redirect(`/apply?error=${encodeURIComponent(message)}`);
 }
 
-function existingAccountAccessRedirect(): never {
-  redirect('/login?notice=application-saved');
-}
-
 function logApplicationIssue(message: string, details: Record<string, unknown>) {
   console.error('[partner-application]', message, details);
 }
 
+function parsePartnerLeadFormData(formData: FormData) {
+  return partnerLeadSchema.safeParse({
+    restaurantName: formData.get('restaurantName'),
+    legalBusinessName: String(formData.get('legalBusinessName') || '').trim(),
+    ownerName: formData.get('ownerName'),
+    phone: formData.get('phone'),
+    email: String(formData.get('email') || '').trim(),
+    city: formData.get('city'),
+    locality: formData.get('locality'),
+    branchAddress: String(formData.get('branchAddress') || '').trim(),
+    state: String(formData.get('state') || '').trim(),
+    country: String(formData.get('country') || 'India').trim(),
+    postalCode: String(formData.get('postalCode') || '').trim(),
+    timezone: String(formData.get('timezone') || 'Asia/Kolkata').trim(),
+    gstRegistrationType: String(formData.get('gstRegistrationType') || '').trim(),
+    restaurantType: String(formData.get('restaurantType') || '').trim(),
+    outletCount: String(formData.get('outletCount') || '').trim() || undefined,
+    requestedPlanId: String(formData.get('requestedPlanId') || '').trim() || undefined,
+    requestedFeatureCodes: parseRequestedFeatureCodes(formData.getAll('requestedFeatureCodes')),
+    requestedBranchCount: String(formData.get('requestedBranchCount') || '').trim() || undefined,
+    affiliateReportedPlatformLinkKind: String(formData.get('affiliateReportedPlatformLinkKind') || '').trim() || undefined,
+    affiliateReportedExistingCustomerNotes: String(formData.get('affiliateReportedExistingCustomerNotes') || '').trim(),
+    currentSystem: String(formData.get('currentSystem') || '').trim(),
+    productsInterested: parseProductInterests(formData.getAll('productsInterested').join(',')),
+    painPoints: parsePainPoints(formData.getAll('painPoints').join(',')),
+    relationshipContext: formData.get('relationshipContext'),
+    consentToContact: booleanFromForm(formData.get('consentToContact')),
+    preferredContactTime: String(formData.get('preferredContactTime') || '').trim(),
+    notes: String(formData.get('notes') || '').trim(),
+  });
+}
+
+function toPartnerLeadInput(data: ReturnType<typeof partnerLeadSchema.parse>): PartnerLeadInput {
+  return {
+    restaurant_name: data.restaurantName,
+    legal_business_name: data.legalBusinessName || null,
+    owner_name: data.ownerName,
+    phone: data.phone,
+    email: data.email || null,
+    city: data.city,
+    locality: data.locality,
+    branch_address: data.branchAddress || null,
+    state: data.state || null,
+    country: data.country,
+    postal_code: data.postalCode || null,
+    timezone: data.timezone,
+    gst_registration_type: data.gstRegistrationType || null,
+    restaurant_type: data.restaurantType || null,
+    outlet_count: data.outletCount,
+    requested_plan_id: data.requestedPlanId || null,
+    requested_feature_codes: data.requestedFeatureCodes,
+    requested_branch_count: data.requestedBranchCount,
+    affiliate_reported_platform_link_kind: data.affiliateReportedPlatformLinkKind || null,
+    affiliate_reported_existing_customer_notes: data.affiliateReportedExistingCustomerNotes || null,
+    current_system: data.currentSystem || null,
+    products_interested: data.productsInterested,
+    pain_points: data.painPoints,
+    relationship_context: data.relationshipContext,
+    consent_to_contact: data.consentToContact,
+    preferred_contact_time: data.preferredContactTime || null,
+    notes: data.notes || null,
+  };
+}
+
 export async function submitApplicationAction(formData: FormData) {
-  const submittedEmail = String(formData.get('email') || '').trim();
-  const password = String(formData.get('password') || '');
-  const supabase = await createSupabaseServerClient();
-  let currentUser = await getCurrentUser();
-  const email = String(currentUser?.email ?? submittedEmail).trim();
+  const currentUser = await getCurrentUser();
+  if (!currentUser?.email) {
+    redirect('/login?notice=google-only&returnTo=%2Fapply');
+  }
+  const email = currentUser.email.trim();
 
   if (currentUser && (await getPartnerProfileByAuthUser(currentUser.id))) {
     redirect('/partner?application=already-exists');
-  }
-
-  if (!currentUser && (!email || password.length < 8)) {
-    applicationErrorRedirect('Enter an email and a password with at least 8 characters.');
   }
 
   const parsed = partnerApplicationSchema.safeParse({
@@ -123,48 +181,9 @@ export async function submitApplicationAction(formData: FormData) {
     applicationErrorRedirect(databaseError instanceof Error ? databaseError.message : String(databaseError));
   }
 
-  if (!currentUser) {
-    await savePendingPartnerApplication(applicationInput);
-
-    const fullName = String(formData.get('fullName') || '').trim();
-    const phone = String(formData.get('phone') || '').trim();
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3021'}/auth/callback`,
-        data: {
-          full_name: fullName,
-          phone,
-          source: 'nom_partner_program',
-        },
-      },
-    });
-
-    if (error) {
-      logApplicationIssue('Supabase Auth signup failed', {
-        email,
-        message: error.message,
-        name: error.name,
-        status: 'status' in error ? error.status : undefined,
-        code: 'code' in error ? error.code : undefined,
-      });
-      applicationErrorRedirect(error.message);
-    }
-
-    if (!data.user || shouldRedirectToExistingAccountAccess(data.user)) {
-      logApplicationIssue('Supabase Auth signup requires existing-account access', {
-        email,
-        hasSession: Boolean(data.session),
-      });
-      existingAccountAccessRedirect();
-    }
-
-    currentUser = { id: data.user.id, email: data.user.email ?? email };
-  }
-
+  let savedProfile;
   try {
-    await upsertPartnerApplication(currentUser.id, applicationInput);
+    savedProfile = await upsertPartnerApplication(currentUser.id, applicationInput);
   } catch (error) {
     logApplicationIssue('Application database save failed', {
       email,
@@ -172,10 +191,11 @@ export async function submitApplicationAction(formData: FormData) {
       message: error instanceof Error ? error.message : String(error),
     });
     applicationErrorRedirect(
-      'Your account was created, but the application could not be saved. Make sure the partner database migration is applied, then log in and submit again.'
+      'Your application could not be saved. Please try again or contact Nom support.'
     );
   }
 
+  await recordApplicationReceipt(savedProfile.id, currentUser.id);
   revalidatePath('/partner');
   redirect('/partner?applied=1');
 }
@@ -210,70 +230,14 @@ export async function submitLeadAction(formData: FormData) {
   const user = await getCurrentUser();
   if (!user) redirect('/login?returnTo=/partner/leads');
 
-  const parsed = partnerLeadSchema.safeParse({
-    restaurantName: formData.get('restaurantName'),
-    legalBusinessName: String(formData.get('legalBusinessName') || '').trim(),
-    ownerName: formData.get('ownerName'),
-    phone: formData.get('phone'),
-    email: String(formData.get('email') || '').trim(),
-    city: formData.get('city'),
-    locality: formData.get('locality'),
-    branchAddress: String(formData.get('branchAddress') || '').trim(),
-    state: String(formData.get('state') || '').trim(),
-    country: String(formData.get('country') || 'India').trim(),
-    postalCode: String(formData.get('postalCode') || '').trim(),
-    timezone: String(formData.get('timezone') || 'Asia/Kolkata').trim(),
-    gstRegistrationType: String(formData.get('gstRegistrationType') || '').trim(),
-    restaurantType: String(formData.get('restaurantType') || '').trim(),
-    outletCount: String(formData.get('outletCount') || '').trim() || undefined,
-    requestedPlanId: String(formData.get('requestedPlanId') || '').trim() || undefined,
-    requestedFeatureCodes: parseRequestedFeatureCodes(formData.getAll('requestedFeatureCodes')),
-    requestedBranchCount: String(formData.get('requestedBranchCount') || '').trim() || undefined,
-    affiliateReportedPlatformLinkKind: String(formData.get('affiliateReportedPlatformLinkKind') || '').trim() || undefined,
-    affiliateReportedExistingCustomerNotes: String(formData.get('affiliateReportedExistingCustomerNotes') || '').trim(),
-    currentSystem: String(formData.get('currentSystem') || '').trim(),
-    productsInterested: parseProductInterests(formData.getAll('productsInterested').join(',')),
-    painPoints: parsePainPoints(formData.getAll('painPoints').join(',')),
-    relationshipContext: formData.get('relationshipContext'),
-    consentToContact: booleanFromForm(formData.get('consentToContact')),
-    preferredContactTime: String(formData.get('preferredContactTime') || '').trim(),
-    notes: String(formData.get('notes') || '').trim(),
-  });
+  const parsed = parsePartnerLeadFormData(formData);
 
   if (!parsed.success) {
     redirect(`/partner/leads?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid lead')}`);
   }
 
   try {
-    await createPartnerLead(user.id, {
-      restaurant_name: parsed.data.restaurantName,
-    legal_business_name: parsed.data.legalBusinessName || null,
-    owner_name: parsed.data.ownerName,
-    phone: parsed.data.phone,
-    email: parsed.data.email || null,
-    city: parsed.data.city,
-    locality: parsed.data.locality,
-    branch_address: parsed.data.branchAddress || null,
-    state: parsed.data.state || null,
-    country: parsed.data.country,
-    postal_code: parsed.data.postalCode || null,
-    timezone: parsed.data.timezone,
-    gst_registration_type: parsed.data.gstRegistrationType || null,
-    restaurant_type: parsed.data.restaurantType || null,
-    outlet_count: parsed.data.outletCount,
-    requested_plan_id: parsed.data.requestedPlanId || null,
-    requested_feature_codes: parsed.data.requestedFeatureCodes,
-    requested_branch_count: parsed.data.requestedBranchCount,
-    affiliate_reported_platform_link_kind: parsed.data.affiliateReportedPlatformLinkKind || null,
-    affiliate_reported_existing_customer_notes: parsed.data.affiliateReportedExistingCustomerNotes || null,
-    current_system: parsed.data.currentSystem || null,
-    products_interested: parsed.data.productsInterested,
-    pain_points: parsed.data.painPoints,
-    relationship_context: parsed.data.relationshipContext,
-    consent_to_contact: parsed.data.consentToContact,
-    preferred_contact_time: parsed.data.preferredContactTime || null,
-      notes: parsed.data.notes || null,
-    });
+    await createPartnerLead(user.id, toPartnerLeadInput(parsed.data));
   } catch (error) {
     redirect(`/partner/leads?error=${encodeURIComponent(error instanceof Error ? error.message : 'Unable to submit lead')}`);
   }
@@ -281,6 +245,54 @@ export async function submitLeadAction(formData: FormData) {
   revalidatePath('/partner');
   revalidatePath('/partner/leads');
   redirect('/partner/leads?submitted=1');
+}
+
+export async function updateLeadAction(formData: FormData) {
+  const rawLeadId = String(formData.get('leadId') || '');
+  const leadId = partnerLeadIdSchema.safeParse(rawLeadId);
+  if (!leadId.success) redirect('/partner/leads?error=Invalid%20lead%20identifier.');
+
+  const returnTo = `/partner/leads/${leadId.data}/edit`;
+  const user = await getCurrentUser();
+  if (!user) redirect(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+
+  const parsed = parsePartnerLeadFormData(formData);
+  if (!parsed.success) {
+    redirect(`${returnTo}?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Invalid lead')}`);
+  }
+
+  try {
+    await updatePartnerLead(user.id, leadId.data, toPartnerLeadInput(parsed.data));
+  } catch (error) {
+    redirect(`${returnTo}?error=${encodeURIComponent(error instanceof Error ? error.message : 'Unable to update lead')}`);
+  }
+
+  revalidatePath('/partner');
+  revalidatePath('/partner/leads');
+  revalidatePath('/admin');
+  revalidatePath('/admin/leads');
+  revalidatePath(returnTo);
+  redirect('/partner/leads?updated=1');
+}
+
+export async function deleteLeadAction(formData: FormData) {
+  const leadId = partnerLeadIdSchema.safeParse(String(formData.get('leadId') || ''));
+  if (!leadId.success) redirect('/partner/leads?error=Invalid%20lead%20identifier.');
+
+  const user = await getCurrentUser();
+  if (!user) redirect('/login?returnTo=/partner/leads');
+
+  try {
+    await deletePartnerLead(user.id, leadId.data);
+  } catch (error) {
+    redirect(`/partner/leads?error=${encodeURIComponent(error instanceof Error ? error.message : 'Unable to delete lead')}`);
+  }
+
+  revalidatePath('/partner');
+  revalidatePath('/partner/leads');
+  revalidatePath('/admin');
+  revalidatePath('/admin/leads');
+  redirect('/partner/leads?deleted=1');
 }
 
 export async function savePayoutMethodAction(formData: FormData) {

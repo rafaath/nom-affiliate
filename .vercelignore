@@ -1,0 +1,12 @@
+# Local secrets and build/browser artifacts are not deployment inputs.
+.env*
+.next/
+.vercel/
+node_modules/
+output/
+.playwright-cli/
+*.tsbuildinfo
+coverage/
+certificates/
+# Research and source artwork stay in the workspace; public assets deploy normally.
+docs/

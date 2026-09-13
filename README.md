@@ -39,15 +39,17 @@ Keep `DATABASE_POOL_MAX=1` for Supabase session-pooler development connections t
 
 ## Login
 
-There is no default password. Create a partner account from `/apply` with an email and a password of at least 8 characters, then use the same email/password on `/login`.
+The affiliate app uses **Google sign-in only**, through the shared Supabase Auth project. Start at `/apply` or `/login` and use the Google account with the same email as any existing Nom partner account.
 
-When Supabase email confirmation is enabled, `/apply` stores the application first, sends the confirmation email, and automatically links the application to the confirmed Auth user after login.
+Password login, email/password signup, password-reset emails, and password changes are disabled in this application. Legacy recovery pages/actions redirect to Google login. Server components, server actions, the proxy, and the callback require a verified email, a Google identity, and a signed OAuth authentication-method claim. A password/OTP session is not sufficient even for an account linked to Google. Existing non-OAuth affiliate sessions need to sign in again.
 
-The branded confirmation email source lives in `supabase/templates/confirmation.html`. Hosted Supabase projects must copy it into **Authentication → Email Templates → Confirm signup**; see `docs/supabase-auth-email-template.md`. Configure custom SMTP before public launch.
+**Shared-project boundary:** leave Supabase's Email provider enabled for other Nom applications. No provider settings, users, passwords, sessions, database policies, or migrations are changed by this app-only rollout. This gate relies on Google being the project's only enabled OAuth provider (as verified in Production on 2026-09-13). If other OAuth providers are enabled later, add session-specific provider attestation before claiming exclusive Google authentication; a linked identity alone does not prove which OAuth provider authenticated a session.
 
-For an admin login, create or use a Supabase Auth user, then either add that user's `auth.users.id` to the `partner_admins` table after the migration has been applied, or temporarily include the user's email in `PARTNER_ADMIN_BOOTSTRAP_EMAILS`.
+Existing saved applications can still be claimed after Google login using the same verified email. Historic email templates are retained for reference but are not part of the affiliate onboarding flow.
 
-Partner signup and portal routes intentionally refuse to run until the partner database migration has been applied. This prevents creating orphan Supabase Auth users when tables like `partner_profiles` do not exist yet.
+For admin access, use Google sign-in, then add that user's `auth.users.id` to `partner_admins` or temporarily include their email in `PARTNER_ADMIN_BOOTSTRAP_EMAILS`. Existing role and approval checks remain unchanged.
+
+Partner application writes require the partner database schema to be ready. See [Google-only rollout and verification](docs/google-only-auth.md) for deployment checks.
 
 ## Database
 

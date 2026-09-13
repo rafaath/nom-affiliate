@@ -6,12 +6,13 @@ import { AnchoredDetails } from '@/components/program/anchored-details';
 import { AdminRecordDetails } from '@/components/program/admin-record-details';
 import { ApprovalStateNotice } from '@/components/program/approval-state-notice';
 import { EmptyState } from '@/components/program/empty-state';
+import { PartnerLeadForm } from '@/components/program/partner-lead-form';
 import { PlatformPackageSelector } from '@/components/program/platform-package-selector';
 import { PortalShell } from '@/components/shell/portal-shell';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import type { PlatformCatalog } from '@/lib/partner-program/platform/types';
-import type { PartnerProfile } from '@/lib/partner-program/types';
+import type { PartnerLead, PartnerProfile } from '@/lib/partner-program/types';
 
 const { mockUsePathname } = vi.hoisted(() => ({ mockUsePathname: vi.fn(() => '/partner/leads') }));
 vi.mock('next/link', () => ({
@@ -78,6 +79,30 @@ const catalog: PlatformCatalog = {
     full_restaurant_setup: ['qr', 'inventory'],
     not_sure: [],
   },
+};
+
+const editableLead: PartnerLead = {
+  id: '00000000-0000-4000-8000-000000000010',
+  partner_id: profile.id,
+  restaurant_name: 'Cafe Ledger',
+  legal_business_name: 'Cafe Ledger Foods LLP',
+  owner_name: 'Asha Shah',
+  phone: '+91 98765 43210',
+  email: 'asha@example.com',
+  city: 'Bengaluru',
+  locality: 'Indiranagar',
+  restaurant_type: 'Cafe',
+  outlet_count: 2,
+  current_system: 'manual',
+  products_interested: ['qr_menu'],
+  pain_points: ['menu_update_issues'],
+  relationship_context: 'Owner requested a walkthrough.',
+  consent_to_contact: true,
+  preferred_contact_time: 'Afternoon',
+  notes: 'Call next week.',
+  status: 'submitted',
+  rejection_reason: null,
+  created_at: '2026-08-29T00:00:00.000Z',
 };
 
 describe('partner UI foundations', () => {
@@ -193,5 +218,15 @@ describe('partner UI foundations', () => {
     expect(growth).toBeChecked();
     expect(screen.getByRole('spinbutton', { name: /Branches/i })).toBeVisible();
     expect(document.querySelector('input[name="requestedPlanId"]')).toHaveValue(catalog.plans[0].id);
+  });
+
+  it('prefills the editable lead form from the submitted lead', () => {
+    const view = render(<PartnerLeadForm action={vi.fn()} lead={editableLead} submitLabel="Save changes" />);
+
+    expect(view.getByRole('textbox', { name: /Restaurant name/i })).toHaveValue('Cafe Ledger');
+    expect(view.getByRole('spinbutton', { name: /Number of outlets/i })).toHaveValue(2);
+    expect(view.getByRole('checkbox', { name: /^QR menu$/i })).toBeChecked();
+    expect(view.getByRole('checkbox', { name: /restaurant agreed to be contacted/i })).toBeChecked();
+    expect(view.getByRole('button', { name: 'Save changes' })).toBeVisible();
   });
 });

@@ -72,7 +72,7 @@ export default async function AdminDealsPage() {
                       </option>
                     ))}
                   </NativeSelect></div>
-                  <div className="grid gap-2"><Label htmlFor={`deal-branches-${deal.id}`}>Branch count</Label><Input id={`deal-branches-${deal.id}`} name="requestedBranchCount" type="number" min={1} defaultValue={deal.requested_branch_count || 1} /></div>
+                  <div className="grid gap-2"><Label htmlFor={`deal-branches-${deal.id}`}>Converted / approved branches</Label><Input id={`deal-branches-${deal.id}`} name="requestedBranchCount" type="number" min={1} max={500} defaultValue={deal.approval_package_snapshot?.branch_count || deal.requested_branch_count || 1} /></div>
                 </div>
                 <div className="grid gap-2 rounded-lg border p-3">
                   <div className="text-sm font-medium">Sold platform capabilities</div>
@@ -91,7 +91,22 @@ export default async function AdminDealsPage() {
                   </div>
                 </div>
                 <div className="grid gap-3 xl:grid-cols-[1fr_1fr_auto] xl:items-end">
-                  <div className="grid gap-2"><Label htmlFor={`deal-commission-${deal.id}`}>Expected commission (cents)</Label><Input id={`deal-commission-${deal.id}`} name="expectedCommissionCents" type="number" min={0} defaultValue={deal.expected_commission_cents ?? 0} /></div>
+                  {deal.partner_profiles?.partner_type === 'affiliate' ? (
+                    <div className="grid gap-2">
+                      <Label htmlFor={`deal-annual-price-${deal.id}`}>Paid annual subscription per branch (₹)</Label>
+                      <Input
+                        id={`deal-annual-price-${deal.id}`}
+                        name="annualSubscriptionPricePerBranchRupees"
+                        type="number"
+                        min={0.01}
+                        step={0.01}
+                        placeholder="For example, 4000"
+                      />
+                      <div className="text-xs text-muted-foreground">Required when marking Won. Commission is 25% once per converted branch.</div>
+                    </div>
+                  ) : (
+                    <div className="grid gap-2"><Label htmlFor={`deal-commission-${deal.id}`}>Expected commission (cents)</Label><Input id={`deal-commission-${deal.id}`} name="expectedCommissionCents" type="number" min={0} defaultValue={deal.expected_commission_cents ?? 0} /></div>
+                  )}
                   <div className="grid gap-2"><Label htmlFor={`deal-note-${deal.id}`}>Next action / note</Label><Input id={`deal-note-${deal.id}`} name="note" defaultValue={deal.next_action ?? ''} /></div>
                   <Button type="submit">Update deal</Button>
                 </div>

@@ -4,6 +4,7 @@ import {
   canTransitionDeal,
   canTransitionLead,
   canTransitionSetup,
+  canPartnerModifyLead,
   legalCommissionStatusTargets,
   legalDealStageTargets,
   legalLeadStatusTargets,
@@ -74,6 +75,12 @@ describe('status machines', () => {
   it('exhaustively accepts only configured lead transitions', () => {
     for (const from of LEAD_STATUSES) for (const to of LEAD_STATUSES) {
       expect(canTransitionLead(from, to), `${from} -> ${to}`).toBe(expectedLead[from].includes(to));
+    }
+  });
+
+  it('allows partner edits and deletion only while a lead is submitted', () => {
+    for (const status of LEAD_STATUSES) {
+      expect(canPartnerModifyLead(status), status).toBe(status === 'submitted');
     }
   });
 

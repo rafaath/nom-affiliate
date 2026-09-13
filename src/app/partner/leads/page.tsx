@@ -1,33 +1,29 @@
+import Link from 'next/link';
+import { Pencil } from 'lucide-react';
 import { submitLeadAction } from '@/app/actions/partner';
 import { ConfigRequired } from '@/components/program/config-required';
 import { ApprovalStateNotice } from '@/components/program/approval-state-notice';
+import { DeleteLeadControl } from '@/components/program/delete-lead-control';
 import { EmptyState } from '@/components/program/empty-state';
 import { ErrorBanner } from '@/components/program/error-banner';
+import { NoticeBanner } from '@/components/program/notice-banner';
 import { PageHeader } from '@/components/program/page-header';
+import { PartnerLeadForm } from '@/components/program/partner-lead-form';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { NativeSelect } from '@/components/ui/native-select';
-import { Textarea } from '@/components/ui/textarea';
 import { getPartnerPageData } from '@/lib/partner-program/data';
 import { formatCurrency } from '@/lib/partner-program/format';
-import { painPointLabels, productInterestLabels } from '@/lib/partner-program/labels';
 import { evaluatePartnerLeadAccess } from '@/lib/partner-program/lead-access';
-import {
-  PAIN_POINTS,
-  PRODUCT_INTERESTS,
-  type LeadStatus,
-  type PlatformLinkKind,
-} from '@/lib/partner-program/types';
+import { canPartnerModifyLead } from '@/lib/partner-program/status-machine';
+import { type LeadStatus, type PlatformLinkKind } from '@/lib/partner-program/types';
 import { requireUser } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
 
 export default async function PartnerLeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; submitted?: string; updated?: string; deleted?: string }>;
 }) {
   try {
     const params = await searchParams;
@@ -49,13 +45,21 @@ export default async function PartnerLeadsPage({
         <div className="grid gap-7">
           <PageHeader eyebrow="Partner portal" title="Restaurant leads" description="Review your lead history and application access state." />
           <ApprovalStateNotice access={leadAccess} />
-          <LeadHistory leads={dashboard.leads} />
+          <LeadHistory canModify={false} leads={dashboard.leads} />
         </div>
       );
     }
+    const notice = params.deleted
+      ? 'Lead deleted.'
+      : params.updated
+        ? 'Lead updated.'
+        : params.submitted
+          ? 'Lead submitted.'
+          : null;
     return (
       <div>
         <PageHeader eyebrow="Partner portal" title="Restaurant leads" description="Register genuine restaurant opportunities and track Nom’s review." />
+        <NoticeBanner message={notice} />
         <div className="grid gap-8 xl:grid-cols-[0.9fr_1.1fr]">
         <Card>
           <CardHeader>
@@ -64,94 +68,11 @@ export default async function PartnerLeadsPage({
           </CardHeader>
           <CardContent>
             <ErrorBanner message={params.error} />
-            <form action={submitLeadAction} className="grid gap-4">
-              <Field label="Restaurant name" name="restaurantName" required />
-              <Field label="Legal / registered business name" name="legalBusinessName" />
-              <div className="grid gap-4 xl:grid-cols-2">
-                <Field label="Owner / manager" name="ownerName" required />
-                <Field label="Phone" name="phone" required />
-              </div>
-              <Field label="Owner email" name="email" type="email" />
-              <div className="grid gap-4 xl:grid-cols-2">
-                <Field label="City" name="city" required />
-                <Field label="Locality" name="locality" required />
-              </div>
-              <Field label="Primary branch address" name="branchAddress" />
-              <div className="grid gap-4 xl:grid-cols-3">
-                <Field label="State" name="state" />
-                <Field label="Country" name="country" defaultValue="India" />
-                <Field label="Postal code" name="postalCode" />
-              </div>
-              <div className="grid gap-4 xl:grid-cols-2">
-                <Field label="Timezone" name="timezone" defaultValue="Asia/Kolkata" />
-                <Field label="GST / registration context" name="gstRegistrationType" placeholder="regular, composition, unregistered, not sure" />
-              </div>
-              <div className="grid gap-4 xl:grid-cols-2">
-                <Field label="Restaurant type" name="restaurantType" />
-                <Field label="Number of outlets" name="outletCount" type="number" min={1} defaultValue={1} />
-              </div>
-              <div className="grid gap-4 rounded-2xl border p-4">
-                <div>
-                  <div className="font-medium">Nom service history</div>
-                  <p className="text-sm text-muted-foreground">
-                    Tell us whether this restaurant is new to Nom or already uses Nom services.
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="affiliateReportedPlatformLinkKind">What best describes this restaurant?</Label>
-                  <NativeSelect
-                    id="affiliateReportedPlatformLinkKind"
-                    name="affiliateReportedPlatformLinkKind"
-                    defaultValue="new_restaurant"
-                  >
-                    <option value="new_restaurant">New to Nom</option>
-                    <option value="existing_franchise">Existing Nom franchise adding locations</option>
-                    <option value="existing_branch">Existing Nom restaurant adding a branch</option>
-                    <option value="existing_customer_addon">Existing Nom customer interested in more services</option>
-                  </NativeSelect>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="affiliateReportedExistingCustomerNotes">What do you know about their Nom account?</Label>
-                  <Textarea
-                    id="affiliateReportedExistingCustomerNotes"
-                    name="affiliateReportedExistingCustomerNotes"
-                    placeholder="Franchise or branch name, owner contact, services they use, or what they need..."
-                  />
-                </div>
-              </div>
-              <Field label="Current system" name="currentSystem" placeholder="Old POS, manual, not sure" />
-              <MultiChoiceField
-                legend="Products they may be interested in"
-                name="productsInterested"
-                options={PRODUCT_INTERESTS.map((value) => ({ label: productInterestLabels[value], value }))}
-              />
-              <MultiChoiceField
-                legend="What challenges are they facing?"
-                name="painPoints"
-                options={PAIN_POINTS.map((value) => ({ label: painPointLabels[value], value }))}
-              />
-              <Field label="Relationship context" name="relationshipContext" placeholder="Owner is my contact, visited and interested..." required />
-              <Field label="Preferred contact time" name="preferredContactTime" />
-              <div className="grid gap-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea id="notes" name="notes" />
-              </div>
-              <label className="flex items-start gap-3 rounded-xl border p-3 text-sm">
-                <input name="consentToContact" type="checkbox" className="mt-0.5 size-4" required />
-                <span>
-                  The restaurant agreed to be contacted or has a genuine reason to expect follow-up.
-                  <span aria-hidden="true" className="text-destructive"> *</span>
-                </span>
-              </label>
-              <p className="rounded-xl bg-muted p-3 text-sm text-muted-foreground">
-                Fake, duplicate, scraped, or unsupported leads may be rejected and can affect partner quality.
-              </p>
-              <Button type="submit">Submit lead</Button>
-            </form>
+            <PartnerLeadForm action={submitLeadAction} submitLabel="Submit lead" />
           </CardContent>
         </Card>
 
-        <LeadHistory leads={dashboard.leads} />
+        <LeadHistory canModify leads={dashboard.leads} />
         </div>
       </div>
     );
@@ -161,7 +82,7 @@ export default async function PartnerLeadsPage({
   }
 }
 
-function LeadHistory({ leads }: { leads: any[] }) {
+function LeadHistory({ canModify, leads }: { canModify: boolean; leads: any[] }) {
   return (
     <Card>
       <CardHeader>
@@ -197,6 +118,18 @@ function LeadHistory({ leads }: { leads: any[] }) {
                 <div className="text-muted-foreground">Submitted as {formatPlatformContext(lead.affiliate_reported_platform_link_kind)}</div>
               ) : null}
             </div>
+            {canModify && canPartnerModifyLead(lead.status) ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/partner/leads/${lead.id}/edit`}>
+                    <Pencil className="size-3.5" aria-hidden="true" />
+                    Edit
+                  </Link>
+                </Button>
+                <DeleteLeadControl leadId={lead.id} restaurantName={lead.restaurant_name} />
+                <span className="text-xs text-muted-foreground">Available until Nom starts reviewing.</span>
+              </div>
+            ) : null}
           </div>
         ))}
         {leads.length === 0 ? <EmptyState title="No leads submitted" description="Approved partners can submit their first restaurant here." /> : null}
@@ -243,42 +176,4 @@ function formatPlatformContext(kind: PlatformLinkKind) {
   };
 
   return labels[kind];
-}
-
-function Field(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string; name: string }) {
-  const { label, name, required, ...inputProps } = props;
-  return (
-    <div className="grid gap-2">
-      <Label htmlFor={name}>
-        {label}
-        {required ? <span aria-hidden="true" className="text-destructive"> *</span> : null}
-      </Label>
-      <Input id={name} name={name} required={required} {...inputProps} />
-    </div>
-  );
-}
-
-function MultiChoiceField({
-  legend,
-  name,
-  options,
-}: {
-  legend: string;
-  name: string;
-  options: readonly { label: string; value: string }[];
-}) {
-  return (
-    <fieldset className="grid gap-3 rounded-xl border p-4">
-      <legend className="px-1 font-medium">{legend}</legend>
-      <p className="text-sm text-muted-foreground">Select all that apply.</p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {options.map((option) => (
-          <label className="flex items-center gap-3 rounded-lg border bg-background p-3 text-sm" key={option.value}>
-            <input className="size-4 shrink-0 accent-plum" name={name} type="checkbox" value={option.value} />
-            <span>{option.label}</span>
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
 }

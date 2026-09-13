@@ -195,12 +195,14 @@ export function PlatformPackageSelector({ catalog, commissionRules, partnerType,
             </CardHeader>
             <CardContent className="grid gap-3 text-sm 2xl:grid-cols-3">
               <div>
-                <div className="text-muted-foreground">Estimated monthly RMS value</div>
-                <div className="text-xl font-black">{formatCurrency(snapshot?.monthly_revenue_cents ?? 0, snapshot?.currency_code)}</div>
+                <div className="text-muted-foreground">
+                  Selected {snapshot?.billing_period?.toLowerCase() || 'subscription'} value
+                </div>
+                <div className="text-xl font-black">{formatCurrency(snapshot?.subscription_value_cents ?? 0, snapshot?.currency_code)}</div>
               </div>
               <div>
-                <div className="text-muted-foreground">Commission preview</div>
-                <div className="text-xl font-black">{formatCurrency(snapshot?.commission_preview_cents ?? 0, snapshot?.currency_code)}</div>
+                <div className="text-muted-foreground">One-time commission preview</div>
+                <div className="text-xl font-black">{snapshot?.commission_preview.available ? formatCurrency(snapshot.commission_preview_cents, snapshot.currency_code) : 'Awaiting price'}</div>
               </div>
               <div>
                 <div className="text-muted-foreground">Final payout rule</div>

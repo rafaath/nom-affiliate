@@ -15,6 +15,15 @@ describe('admin workflow write contract', () => {
     expect(source).toContain('if (stageChanged) {');
   });
 
+  it('calculates affiliate commission from the annual price per converted branch and records its rule', () => {
+    expect(source).toContain('calculateAnnualInvoiceBasis');
+    expect(source).toContain('calculateCommissionAmount');
+    expect(source).toContain('annual_subscription_price_per_branch_cents');
+    expect(source).toContain('commission_frequency: \'one_time\'');
+    expect(source).toContain('commission_scope: \'per_converted_branch\'');
+    expect(source).toContain('rule_id,');
+  });
+
   it('records both sides of deal stage events', () => {
     expect(source).toContain('event_type, from_stage, to_stage, note');
     expect(source).toContain('${previousDeal.stage}, ${input.stage}');

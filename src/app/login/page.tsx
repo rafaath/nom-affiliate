@@ -1,11 +1,9 @@
 import Link from "next/link";
-import { signInAction } from "@/app/actions/auth";
 import { ErrorBanner } from "@/components/program/error-banner";
 import { GoogleSignInButton } from "@/components/program/google-sign-in-button";
 import { NoticeBanner } from "@/components/program/notice-banner";
 import { MarketingHeader } from "@/components/shell/marketing-header";
 import { MarketingFooter } from "@/components/shell/marketing-footer";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,9 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ACCOUNT_ACCESS_NOTICE } from "@/lib/supabase/auth-flow";
+import { ACCOUNT_ACCESS_NOTICE, GOOGLE_ONLY_NOTICE } from "@/lib/supabase/auth-flow";
 
 export default async function LoginPage({
   searchParams,
@@ -24,7 +20,8 @@ export default async function LoginPage({
 }) {
   const params = await searchParams;
   const noticeMessage =
-    params.notice === "application-saved" ? ACCOUNT_ACCESS_NOTICE : null;
+    params.notice === "application-saved" ? ACCOUNT_ACCESS_NOTICE :
+    params.notice === "google-only" ? GOOGLE_ONLY_NOTICE : null;
   return (
     <div className="min-h-screen bg-paper">
       <MarketingHeader />
@@ -54,47 +51,10 @@ export default async function LoginPage({
             <ErrorBanner message={params.error ?? null} />
             <NoticeBanner message={noticeMessage} />
             <GoogleSignInButton returnTo={params.returnTo || "/partner"} />
-            <div className="my-5 flex items-center gap-3 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">
-              <span className="h-px flex-1 bg-border" />
-              Existing password account
-              <span className="h-px flex-1 bg-border" />
-            </div>
-            <form action={signInAction} className="grid gap-5">
-              <input
-                type="hidden"
-                name="returnTo"
-                value={params.returnTo || "/partner"}
-              />
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between gap-4">
-                  <Label htmlFor="password">Password</Label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-sm text-primary underline"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                />
-              </div>
-              <Button type="submit">Login</Button>
-            </form>
+            <p className="mt-5 text-sm leading-6 text-muted-foreground">
+              Use the Google account with the same email as your Nom partner
+              account. Password and email-link sign-in are not available here.
+            </p>
           </CardContent>
         </Card>
       </main>

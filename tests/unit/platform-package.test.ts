@@ -19,7 +19,7 @@ const plan: PlatformPlan = {
   description: null,
   price_cents: 500000,
   currency_code: 'INR',
-  billing_period: 'monthly',
+  billing_period: 'yearly',
   is_active: true,
   features: features.slice(0, 2),
   feature_codes: ['qr', 'menu'],
@@ -67,11 +67,12 @@ describe('affiliate requested package snapshot', () => {
       partnerType: 'affiliate',
       commissionRules: [
         {
-          code: 'affiliate_fixed',
+          code: 'affiliate_annual_25_percent',
+          conditions: { commission_basis: 'first_paid_annual_subscription_invoice' },
           partner_type: 'affiliate',
           commission_type: 'referral',
-          fixed_amount_cents: 200000,
-          percent_bps: null,
+          fixed_amount_cents: null,
+          percent_bps: 2500,
           currency_code: 'INR',
           validation_days: 30,
         },
@@ -79,8 +80,35 @@ describe('affiliate requested package snapshot', () => {
     });
 
     expect(snapshot.monthly_revenue_cents).toBe(1500000);
-    expect(snapshot.commission_preview_cents).toBe(200000);
+    expect(snapshot.subscription_value_cents).toBe(1500000);
+    expect(snapshot.commission_preview_cents).toBe(375000);
     expect(snapshot.feature_codes).toEqual(['qr', 'menu', 'inventory']);
     expect(snapshot.summary).toBe('Growth · 3 branches · 3 capabilities');
+  });
+
+  it('does not present a monthly catalog price as an annual commission basis', () => {
+    const snapshot = buildRequestedPackageSnapshot({
+      plan: { ...plan, billing_period: 'monthly' },
+      selectedFeatureCodes: [],
+      requestedBranchCount: 1,
+      features,
+      partnerType: 'affiliate',
+      commissionRules: [
+        {
+          code: 'affiliate_annual_25_percent',
+          conditions: { commission_basis: 'first_paid_annual_subscription_invoice' },
+          partner_type: 'affiliate',
+          commission_type: 'referral',
+          fixed_amount_cents: null,
+          percent_bps: 2500,
+          currency_code: 'INR',
+          validation_days: 30,
+        },
+      ],
+    });
+
+    expect(snapshot.commission_preview_cents).toBe(0);
+    expect(snapshot.commission_preview.available).toBe(false);
+    expect(snapshot.commission_preview.explanation).toContain('not marked as annual');
   });
 });

@@ -14,6 +14,8 @@ import { formatCurrency } from '@/lib/partner-program/format';
 import { getPartnerPageData, summarizeEarnings } from '@/lib/partner-program/data';
 import { partnerTierLabels } from '@/lib/partner-program/labels';
 import { evaluatePartnerLeadAccess } from '@/lib/partner-program/lead-access';
+import { ApplicationConversion } from '@/components/program/google-ads-provider';
+import { readApplicationTransaction } from '@/lib/analytics/application-receipt.server';
 
 export default async function PartnerDashboardPage() {
   try {
@@ -38,6 +40,7 @@ export default async function PartnerDashboardPage() {
     }
 
     const earnings = summarizeEarnings(dashboard.commissions);
+    const applicationTransaction = await readApplicationTransaction(dashboard.profile.id, user.id);
     const leadAccess = evaluatePartnerLeadAccess(dashboard.profile, dashboard.agreementAcceptance);
     const gettingStartedSteps = [
       {
@@ -77,6 +80,7 @@ export default async function PartnerDashboardPage() {
 
     return (
       <div className="grid gap-8">
+        <ApplicationConversion transactionId={applicationTransaction} />
         <PageHeader eyebrow="Partner portal" title={`Welcome, ${dashboard.profile.full_name}`} description="Track application access, restaurant opportunities, eligible commissions, and payout progress." />
         {!leadAccess.allowed ? <ApprovalStateNotice access={leadAccess} /> : null}
         <section className="grid gap-4 md:grid-cols-4">

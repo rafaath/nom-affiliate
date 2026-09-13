@@ -1,7 +1,7 @@
 import { NOM_COMPANY } from '@/lib/company';
 
-export const PARTNER_PRIVACY_NOTICE_VERSION = '2026-07-23-v1' as const;
-export const PARTNER_PRIVACY_NOTICE_EFFECTIVE_DATE = '23 July 2026';
+export const PARTNER_PRIVACY_NOTICE_VERSION = '2026-09-13-v2' as const;
+export const PARTNER_PRIVACY_NOTICE_EFFECTIVE_DATE = '13 September 2026';
 
 export const partnerPrivacyNoticeSections = [
   {
@@ -30,6 +30,14 @@ export const partnerPrivacyNoticeSections = [
       'To communicate about applications, program operations, security, support, legal changes, and records.',
       'To maintain accurate business, tax, security, compliance, and dispute records and to protect Nom, restaurants, and partners.',
       'To improve the reliability and usability of the partner program using aggregated or appropriately protected information.',
+    ],
+  },
+  {
+    title: 'Optional advertising measurement',
+    paragraphs: [
+      'Where enabled, you may allow or decline Google Ads measurement using the on-site privacy choices. Google’s advertising tag is not loaded until you allow measurement. Declining does not prevent sign-in, applying, or using the partner portal.',
+      'If you allow measurement, Google may receive ad-click identifiers, campaign information, browser/device and network information, and a successful-application event with an opaque duplicate-prevention identifier. We do not send application answers, names, email addresses, phone numbers, or resume links in this event. Personalised advertising and enhanced conversions are not enabled by this integration.',
+      'The site remembers your privacy choice for up to 180 days and consented campaign attribution for up to 30 days in your browser. A signed, first-party application-success receipt expires after seven days. You can change your choice through Privacy choices; declining removes this site’s stored campaign attribution and accessible Google advertising-click cookies. Withdrawing consent does not retract data already received by Google.',
     ],
   },
   {
@@ -83,4 +91,3 @@ export const partnerPrivacyNoticeSections = [
     ],
   },
 ] as const;
-

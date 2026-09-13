@@ -15,6 +15,7 @@ import { defaultPartnerResources } from './resources';
 import { assertPartnerLeadAccess, evaluatePartnerLeadAccess, type LeadAccessResult } from './lead-access';
 import { getCurrentReferralPartnerAgreementDocument } from './referral-agreement.server';
 import { REFERRAL_PARTNER_AGREEMENT_VERSION } from './referral-agreement';
+import { canPartnerModifyLead } from './status-machine';
 import {
   LEAD_ENABLED_APPLICATION_STATUSES,
   type PartnerAgreementAcceptance,
@@ -221,9 +222,12 @@ async function getCommissionPreviewRules(sql: SqlExecutor, partnerType?: string 
       fixed_amount_cents,
       percent_bps,
       currency_code,
-      validation_days
+      validation_days,
+      conditions
     from public.partner_commission_rules
     where is_active = true
+      and active_from <= now()
+      and (active_until is null or active_until > now())
       and commission_type in ('referral', 'sales')
       and (
         partner_type is null
@@ -501,9 +505,9 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
           when l.id is null then null
           else json_build_object('restaurant_name', l.restaurant_name, 'city', l.city, 'email', l.email)
         end as partner_leads,
-        case when p.id is null then null else json_build_object('full_name', p.full_name) end as partner_profiles,
-        case when requested_sp.id is null then null else json_build_object('id', requested_sp.id, 'name', requested_sp.name, 'code', requested_sp.code, 'price_cents', requested_sp.price_cents, 'currency_code', requested_sp.currency_code) end as requested_subscription_plans,
-        case when sp.id is null then null else json_build_object('id', sp.id, 'name', sp.name, 'code', sp.code, 'price_cents', sp.price_cents, 'currency_code', sp.currency_code) end as subscription_plans,
+        case when p.id is null then null else json_build_object('full_name', p.full_name, 'partner_type', p.partner_type) end as partner_profiles,
+        case when requested_sp.id is null then null else json_build_object('id', requested_sp.id, 'name', requested_sp.name, 'code', requested_sp.code, 'price_cents', requested_sp.price_cents, 'currency_code', requested_sp.currency_code, 'billing_period', requested_sp.billing_period) end as requested_subscription_plans,
+        case when sp.id is null then null else json_build_object('id', sp.id, 'name', sp.name, 'code', sp.code, 'price_cents', sp.price_cents, 'currency_code', sp.currency_code, 'billing_period', sp.billing_period) end as subscription_plans,
         case when req.id is null then null else json_build_object('id', req.id, 'status', req.status, 'created_franchise_id', req.created_franchise_id, 'created_branch_id', req.created_branch_id) end as partner_platform_onboarding_requests
       from public.partner_deals d
       left join public.partner_leads l on l.id = d.lead_id
@@ -1117,6 +1121,174 @@ export async function createPartnerLead(
     `;
 
     return lead;
+  });
+}
+
+const submittedLeadMutationError =
+  'This lead can no longer be changed because Nom has started reviewing it.';
+
+function assertSubmittedLeadMutation(lead: PartnerLead | null): PartnerLead {
+  if (!lead) throw new Error('Lead not found.');
+  if (!canPartnerModifyLead(lead.status)) throw new Error(submittedLeadMutationError);
+  return lead;
+}
+
+async function getOwnedLeadForUpdate(sql: SqlExecutor, partnerId: string, leadId: string) {
+  const rows = await sql`
+    select *
+    from public.partner_leads
+    where id = ${leadId}
+      and partner_id = ${partnerId}
+    limit 1
+    for update
+  `;
+
+  return assertSubmittedLeadMutation((rows[0] as PartnerLead | undefined) ?? null);
+}
+
+export async function getEditablePartnerLead(authUserId: string, leadId: string) {
+  noStore();
+  try {
+    await assertPartnerPlatformSchemaReady();
+    const sql = getDatabase();
+    const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
+    const agreementAcceptance = profile
+      ? await getCurrentAgreementAcceptanceWithClient(sql, profile.id)
+      : null;
+    const eligibleProfile = assertPartnerLeadAccess(profile, agreementAcceptance);
+
+    const rows = await sql`
+      select *
+      from public.partner_leads
+      where id = ${leadId}
+        and partner_id = ${eligibleProfile.id}
+      limit 1
+    `;
+
+    return assertSubmittedLeadMutation((rows[0] as PartnerLead | undefined) ?? null);
+  } catch (error) {
+    throw toPartnerDatabaseError(error);
+  }
+}
+
+export async function updatePartnerLead(
+  authUserId: string,
+  leadId: string,
+  input: PartnerLeadInput
+) {
+  await assertPartnerPlatformSchemaReady();
+  const sql = getDatabase();
+
+  return sql.begin(async (tx) => {
+    const currentProfile = await getPartnerProfileForUpdate(tx, authUserId);
+    const agreementAcceptance = currentProfile
+      ? await getCurrentAgreementAcceptanceWithClient(tx, currentProfile.id)
+      : null;
+    const profile = assertPartnerLeadAccess(currentProfile, agreementAcceptance);
+    await getOwnedLeadForUpdate(tx, profile.id, leadId);
+
+    const rows = await tx`
+      update public.partner_leads
+      set
+        restaurant_name = ${input.restaurant_name},
+        legal_business_name = ${input.legal_business_name || null},
+        owner_name = ${input.owner_name},
+        phone = ${input.phone},
+        email = ${input.email || null},
+        city = ${input.city},
+        locality = ${input.locality},
+        branch_address = ${input.branch_address || null},
+        state = ${input.state || null},
+        country = ${input.country || 'India'},
+        postal_code = ${input.postal_code || null},
+        timezone = ${input.timezone || 'Asia/Kolkata'},
+        gst_registration_type = ${input.gst_registration_type || null},
+        restaurant_type = ${input.restaurant_type || null},
+        outlet_count = ${input.outlet_count},
+        affiliate_reported_platform_link_kind = ${input.affiliate_reported_platform_link_kind || null},
+        affiliate_reported_existing_customer_notes = ${input.affiliate_reported_existing_customer_notes || null},
+        onboarding_intent = coalesce(onboarding_intent, '{}'::jsonb) || ${tx.json(toJsonValue({
+          source: 'affiliate_partner_portal',
+          affiliate_reported_platform_link_kind: input.affiliate_reported_platform_link_kind || null,
+          affiliate_reported_existing_customer_notes: input.affiliate_reported_existing_customer_notes || null,
+          branch_handoff_complete: Boolean(input.branch_address && input.state && input.country),
+        }))},
+        current_system = ${input.current_system || null},
+        products_interested = ${input.products_interested},
+        pain_points = ${input.pain_points},
+        relationship_context = ${input.relationship_context},
+        consent_to_contact = ${input.consent_to_contact},
+        preferred_contact_time = ${input.preferred_contact_time || null},
+        notes = ${input.notes || null},
+        updated_at = now()
+      where id = ${leadId}
+        and partner_id = ${profile.id}
+        and status = 'submitted'
+      returning *
+    `;
+    const lead = firstRow(rows as unknown as PartnerLead[], submittedLeadMutationError);
+    const reconciliation = await reconcileLeadAgainstPlatform(
+      {
+        leadId: lead.id,
+        restaurantName: lead.restaurant_name,
+        ownerName: lead.owner_name,
+        phone: lead.phone,
+        email: lead.email,
+        city: lead.city,
+        locality: lead.locality,
+      },
+      tx
+    );
+    await persistLeadReconciliation(lead.id, reconciliation, tx);
+
+    await tx`
+      insert into public.partner_lead_events (
+        lead_id,
+        actor_auth_user_id,
+        actor_partner_id,
+        event_type,
+        from_status,
+        to_status,
+        note,
+        metadata
+      )
+      values (
+        ${lead.id},
+        ${authUserId},
+        ${profile.id},
+        'lead_updated',
+        'submitted',
+        'submitted',
+        'Partner updated the submitted lead.',
+        ${tx.json(toJsonValue({ platform_reconciliation: reconciliation }))}
+      )
+    `;
+
+    return lead;
+  });
+}
+
+export async function deletePartnerLead(authUserId: string, leadId: string) {
+  await assertPartnerPlatformSchemaReady();
+  const sql = getDatabase();
+
+  return sql.begin(async (tx) => {
+    const currentProfile = await getPartnerProfileForUpdate(tx, authUserId);
+    const agreementAcceptance = currentProfile
+      ? await getCurrentAgreementAcceptanceWithClient(tx, currentProfile.id)
+      : null;
+    const profile = assertPartnerLeadAccess(currentProfile, agreementAcceptance);
+    await getOwnedLeadForUpdate(tx, profile.id, leadId);
+
+    const rows = await tx`
+      delete from public.partner_leads
+      where id = ${leadId}
+        and partner_id = ${profile.id}
+        and status = 'submitted'
+      returning id
+    `;
+
+    return firstRow(rows as unknown as Array<{ id: string }>, submittedLeadMutationError);
   });
 }
 

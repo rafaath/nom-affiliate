@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { readSupabaseAuthEnv } from '@/lib/supabase/env';
+import { getGoogleSessionUser } from '@/lib/supabase/google-session';
 
 const PROTECTED_PREFIXES = ['/partner', '/admin'];
 const AUTH_ROUTES = ['/login'];
@@ -51,18 +52,23 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getGoogleSessionUser(supabase);
+
+  function redirectWithCookies(url: URL) {
+    const redirected = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) => redirected.cookies.set(cookie));
+    return addSecurityHeaders(redirected, requestId);
+  }
 
   if (isProtectedPath(pathname) && !user) {
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('returnTo', pathname);
-    return addSecurityHeaders(NextResponse.redirect(loginUrl), requestId);
+    loginUrl.searchParams.set('returnTo', `${pathname}${request.nextUrl.search}`);
+    loginUrl.searchParams.set('notice', 'google-only');
+    return redirectWithCookies(loginUrl);
   }
 
   if (pathname === '/login' && user) {
-    return addSecurityHeaders(NextResponse.redirect(new URL('/partner', request.url)), requestId);
+    return redirectWithCookies(new URL('/partner', request.url));
   }
 
   return addSecurityHeaders(response, requestId);

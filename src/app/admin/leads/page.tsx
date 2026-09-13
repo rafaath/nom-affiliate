@@ -48,8 +48,8 @@ export default async function AdminLeadsPage() {
                     <div className="font-medium">Affiliate requested package</div>
                     <div className="text-muted-foreground">
                       {lead.requested_subscription_plans?.name ?? 'No plan selected'} · {lead.requested_branch_count ?? lead.outlet_count} branches ·{' '}
-                      {formatCurrency(lead.requested_monthly_revenue_cents || 0, lead.requested_subscription_plans?.currency_code)} monthly value ·{' '}
-                      {formatCurrency(lead.requested_commission_preview_cents || 0, lead.requested_subscription_plans?.currency_code)} commission preview
+                      {formatCurrency(lead.requested_monthly_revenue_cents || 0, lead.requested_subscription_plans?.currency_code)} selected subscription value ·{' '}
+                      {formatCurrency(lead.requested_commission_preview_cents || 0, lead.requested_subscription_plans?.currency_code)} one-time commission preview
                     </div>
                     <div className="text-muted-foreground">
                       {(lead.requested_feature_codes ?? []).length} requested capabilities · {lead.legal_business_name ?? lead.restaurant_name} ·{' '}

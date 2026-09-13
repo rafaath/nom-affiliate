@@ -94,6 +94,8 @@ export const partnerLeadSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 });
 
+export const partnerLeadIdSchema = z.string().trim().uuid('Invalid lead identifier.');
+
 export const payoutMethodSchema = z.object({
   payoutName: requiredText.max(160),
   payoutType: z.enum(['upi', 'bank_reference']),

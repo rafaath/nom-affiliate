@@ -25,6 +25,20 @@ export function calculateCommissionAmount(rule: CommissionRule, revenueCents = 0
   return fixed + percentage;
 }
 
+export function calculateAnnualInvoiceBasis(pricePerBranchCents: number, branchCount: number) {
+  if (!Number.isSafeInteger(pricePerBranchCents) || pricePerBranchCents <= 0) {
+    throw new Error('Annual subscription price per branch must be a positive amount in whole paise.');
+  }
+  if (!Number.isSafeInteger(branchCount) || branchCount <= 0 || branchCount > 500) {
+    throw new Error('Converted branch count must be a whole number between 1 and 500.');
+  }
+  const basis = pricePerBranchCents * branchCount;
+  if (!Number.isSafeInteger(basis) || basis > 2_147_483_647) {
+    throw new Error('Annual invoice amount exceeds the supported limit.');
+  }
+  return basis;
+}
+
 export function evaluateCommissionEligibility(input: CommissionEligibilityInput) {
   const now = input.now ?? new Date();
 

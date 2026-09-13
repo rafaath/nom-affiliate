@@ -54,6 +54,13 @@ function formNonNegativeInteger(formData: FormData, key: string) {
   return Number.isFinite(value) && value >= 0 ? Math.trunc(value) : undefined;
 }
 
+function formPositiveMoneyCents(formData: FormData, key: string) {
+  const raw = String(formData.get(key) || '').trim();
+  if (!raw) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : undefined;
+}
+
 function formEnum<const T extends readonly [string, ...string[]]>(
   formData: FormData,
   key: string,
@@ -128,6 +135,10 @@ export async function updateDealStageAction(formData: FormData) {
   const stage = formEnum(formData, 'stage', DEAL_STAGES);
   const note = String(formData.get('note') || '').trim();
   const expectedCommissionCents = formNonNegativeInteger(formData, 'expectedCommissionCents');
+  const annualSubscriptionPricePerBranchCents = formPositiveMoneyCents(
+    formData,
+    'annualSubscriptionPricePerBranchRupees'
+  );
   const requestedPlanId = formText(formData, 'requestedPlanId');
   const requestedFeatureCodes = formTextList(formData, 'requestedFeatureCodes');
   const requestedBranchCount = formPositiveInteger(formData, 'requestedBranchCount');
@@ -141,6 +152,7 @@ export async function updateDealStageAction(formData: FormData) {
       stage: stage.data,
       note,
       expectedCommissionCents,
+      annualSubscriptionPricePerBranchCents,
       requestedPlanId,
       requestedFeatureCodes,
       requestedBranchCount,

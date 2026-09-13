@@ -1,27 +1,8 @@
-export const AUTH_PASSWORD_MIN_LENGTH = 8;
+export const GOOGLE_ONLY_NOTICE =
+  'The Nom Partner Program uses Google sign-in only. Continue with Google using the email associated with your partner account.';
 
 export const ACCOUNT_ACCESS_NOTICE =
-  'Your application was saved. If you already have a Nom account, sign in or reset your password. If this is a new account, check your inbox for the confirmation email.';
-
-type SignupUser = {
-  identities?: unknown[] | null;
-};
-
-export function shouldRedirectToExistingAccountAccess(user: SignupUser | null) {
-  return !user || user.identities?.length === 0;
-}
-
-export function validatePasswordReset(password: string, confirmation: string) {
-  if (password.length < AUTH_PASSWORD_MIN_LENGTH) {
-    return `Use at least ${AUTH_PASSWORD_MIN_LENGTH} characters for your new password.`;
-  }
-
-  if (password !== confirmation) {
-    return 'The password confirmation does not match.';
-  }
-
-  return null;
-}
+  'Your application was saved. Continue with Google using the same email to access it.';
 
 export function getSafeAuthRedirectPath(value: string | null | undefined, fallback = '/partner') {
   if (!value || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) {

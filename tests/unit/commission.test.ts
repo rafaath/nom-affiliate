@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calculateAnnualInvoiceBasis,
   calculateCommissionAmount,
   evaluateCommissionEligibility,
   evaluateSetupCommissionEligibility,
@@ -7,6 +8,31 @@ import {
 } from '@/lib/partner-program/commission';
 
 describe('commission rules', () => {
+  it.each([[400_000, 100_000], [1_600_000, 400_000]])('pays 25 percent once on an annual branch invoice of %i paise', (invoice, expected) => {
+    expect(calculateCommissionAmount({ commission_type: 'referral', fixed_amount_cents: null, percent_bps: 2500, validation_days: 30, currency_code: 'INR' }, calculateAnnualInvoiceBasis(invoice, 1))).toBe(expected);
+  });
+
+  it.each([[0, 1], [400_000, 0.5], [400_000, 501], [Number.NaN, 1], [2_147_483_647, 2]])('rejects an invalid invoice basis (%s, %s)', (amount, branches) => {
+    expect(() => calculateAnnualInvoiceBasis(amount, branches)).toThrow();
+  });
+
+  it('calculates a one-time 25% commission from the annual price of every converted branch', () => {
+    const basis = calculateAnnualInvoiceBasis(400_000, 3);
+    expect(basis).toBe(1_200_000);
+    expect(
+      calculateCommissionAmount(
+        {
+          commission_type: 'referral',
+          fixed_amount_cents: null,
+          percent_bps: 2500,
+          validation_days: 30,
+          currency_code: 'INR',
+        },
+        basis
+      )
+    ).toBe(300_000);
+  });
+
   it('combines fixed and percentage commission', () => {
     expect(
       calculateCommissionAmount(
