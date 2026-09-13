@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { getAdminDashboard } from '@/lib/partner-program/data';
+import { getAdminPageData } from '@/lib/partner-program/data';
 import { formatCurrency } from '@/lib/partner-program/format';
 import { requirePartnerAdmin } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
@@ -15,7 +15,7 @@ import { isSupabaseConfigError } from '@/lib/supabase/env';
 export default async function AdminPayoutsPage() {
   try {
     await requirePartnerAdmin('/admin/payouts');
-    const dashboard = await getAdminDashboard();
+    const dashboard = await getAdminPageData(['payoutBatches']);
 
     return (
       <div className="grid gap-8">

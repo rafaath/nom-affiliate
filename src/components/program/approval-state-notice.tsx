@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Clock3, FileSignature, ShieldAlert } from 'lucide-react';
-import type { LeadAccessResult } from '@/lib/partner-program/lead-access';
+import { partnerAccessStateKey, type LeadAccessResult } from '@/lib/partner-program/lead-access';
+import { PartnerAccessRefresh } from './partner-access-refresh';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from './status-badge';
 
@@ -13,6 +14,7 @@ export function ApprovalStateNotice({ access }: { access: Exclude<LeadAccessResu
         : Clock3;
   return (
     <div className="rounded-lg border border-plum/20 bg-lilac/45 p-5" role="status">
+      <PartnerAccessRefresh stateKey={partnerAccessStateKey(access)} />
       <div className="flex flex-wrap items-start gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-plum text-paper">
           <Icon className="size-5" aria-hidden="true" />

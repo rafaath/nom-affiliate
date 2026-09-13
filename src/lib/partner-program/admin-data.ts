@@ -1,7 +1,7 @@
+import { withDatabaseOperation } from '@/lib/db/operation';
 import {
   assertPartnerPlatformSchemaReady,
   assertPartnerSchemaReady,
-  getDatabase,
   toJsonValue,
   toPartnerDatabaseError,
   type SqlExecutor,
@@ -30,10 +30,13 @@ import type {
   SetupStatus,
 } from './types';
 
-export async function isPartnerAdmin(authUserId: string, email?: string | null) {
+export async function isPartnerAdmin(authUserId: string, email?: string | null, sql?: SqlExecutor): Promise<boolean> {
+  if (!sql) {
+    await assertPartnerSchemaReady();
+    return withDatabaseOperation('admin.access', (tx) => isPartnerAdmin(authUserId, email, tx));
+  }
   try {
     await assertPartnerSchemaReady();
-    const sql = getDatabase();
     const rows = await sql`
       select auth_user_id
       from public.partner_admins
@@ -142,9 +145,8 @@ export async function reviewApplication(input: {
   note: string;
 }) {
   await assertPartnerSchemaReady();
-  const sql = getDatabase();
 
-  await sql.begin(async (tx) => {
+  await withDatabaseOperation('reviewApplication', async (tx) => {
     await tx`
       update public.partner_applications
       set
@@ -198,9 +200,8 @@ export async function reviewLead(input: {
   ownerEmail?: string | null;
 }) {
   await assertPartnerPlatformSchemaReady();
-  const sql = getDatabase();
 
-  await sql.begin(async (tx) => {
+  await withDatabaseOperation('reviewLead', async (tx) => {
     const previousRows = await tx`
       select *
       from public.partner_leads
@@ -463,9 +464,8 @@ export async function updateDealStage(input: {
   requestedBranchCount?: number;
 }) {
   await assertPartnerPlatformSchemaReady();
-  const sql = getDatabase();
 
-  await sql.begin(async (tx) => {
+  await withDatabaseOperation('updateDealStage', async (tx) => {
     const previousRows = await tx`
       select d.*, req.status as onboarding_request_status, p.partner_type::text as partner_type
       from public.partner_deals d
@@ -660,9 +660,8 @@ export async function reviewSetup(input: {
   note: string;
 }) {
   await assertPartnerPlatformSchemaReady();
-  const sql = getDatabase();
 
-  await sql.begin(async (tx) => {
+  await withDatabaseOperation('reviewSetup', async (tx) => {
     const lockedRows = await tx`
       select status
       from public.partner_setup_checklists
@@ -716,9 +715,8 @@ export async function reviewCommission(input: {
   note: string;
 }) {
   await assertPartnerPlatformSchemaReady();
-  const sql = getDatabase();
 
-  await sql.begin(async (tx) => {
+  await withDatabaseOperation('reviewCommission', async (tx) => {
     const currentRows = await tx`
       select status
       from public.partner_commissions
@@ -770,9 +768,7 @@ export async function createPayoutBatch(input: {
   label: string;
 }) {
   await assertPartnerSchemaReady();
-  const sql = getDatabase();
-
-  await sql.begin(async (tx) => {
+  await withDatabaseOperation('createPayoutBatch', async (tx) => {
     const commissions = await tx`
       select *
       from public.partner_commissions
@@ -828,9 +824,7 @@ export async function resolveDispute(input: {
   decision: string;
 }) {
   await assertPartnerSchemaReady();
-  const sql = getDatabase();
-
-  await sql`
+  await withDatabaseOperation('resolveDispute', (sql) => sql`
     update public.partner_disputes
     set
       status = ${input.status},
@@ -839,5 +833,5 @@ export async function resolveDispute(input: {
       decided_at = now(),
       updated_at = now()
     where id = ${input.disputeId}
-  `;
+  `);
 }

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { cache } from 'react';
 import { isPartnerAdmin } from '@/lib/partner-program/admin-data';
 import { createSupabaseServerClient } from './server';
 import { getGoogleSessionUser } from './google-session';
@@ -8,7 +9,7 @@ export type CurrentUser = {
   email: string | null;
 };
 
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = await createSupabaseServerClient();
   const user = await getGoogleSessionUser(supabase);
 
@@ -20,7 +21,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     id: user.id,
     email: user.email ?? null,
   };
-}
+});
 
 export async function requireUser(returnTo = '/partner') {
   const user = await getCurrentUser();

@@ -2,7 +2,7 @@ import { ConfigRequired } from '@/components/program/config-required';
 import { MetricCard } from '@/components/program/metric-card';
 import { PageHeader } from '@/components/program/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getAdminDashboard } from '@/lib/partner-program/data';
+import { getAdminPageData } from '@/lib/partner-program/data';
 import { formatCurrency } from '@/lib/partner-program/format';
 import { requirePartnerAdmin } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
@@ -10,7 +10,7 @@ import { isSupabaseConfigError } from '@/lib/supabase/env';
 export default async function AdminPage() {
   try {
     await requirePartnerAdmin('/admin');
-    const dashboard = await getAdminDashboard();
+    const dashboard = await getAdminPageData(['commissions', 'partners', 'leads', 'deals', 'applications', 'onboardingRequests', 'setupChecklists', 'disputes', 'platformCatalog', 'platformAttributions', 'payoutMethods', 'payoutBatches']);
     const approvedCommission = dashboard.commissions
       .filter((commission) => commission.status === 'approved')
       .reduce((sum, commission) => sum + Number(commission.amount_cents || 0), 0);

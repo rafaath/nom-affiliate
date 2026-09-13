@@ -86,6 +86,9 @@ export async function reviewApplicationAction(formData: FormData) {
 
   revalidatePath('/admin');
   revalidatePath('/admin/partners');
+  revalidatePath('/partner');
+  revalidatePath('/partner/agreement');
+  revalidatePath('/partner/leads');
   redirect('/admin/partners?reviewed=1');
 }
 

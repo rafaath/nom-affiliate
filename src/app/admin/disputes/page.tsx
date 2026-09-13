@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
-import { getAdminDashboard } from '@/lib/partner-program/data';
+import { getAdminPageData } from '@/lib/partner-program/data';
 import { DISPUTE_STATUSES } from '@/lib/partner-program/types';
 import { requirePartnerAdmin } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
@@ -16,7 +16,7 @@ import { isSupabaseConfigError } from '@/lib/supabase/env';
 export default async function AdminDisputesPage() {
   try {
     await requirePartnerAdmin('/admin/disputes');
-    const dashboard = await getAdminDashboard();
+    const dashboard = await getAdminPageData(['disputes']);
 
     return (
       <div>

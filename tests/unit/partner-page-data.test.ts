@@ -38,6 +38,21 @@ function createQueryRecorder() {
 }
 
 describe('partner page data', () => {
+  it('starts independent section reads together after loading the profile', async () => {
+    const finish: Array<() => void> = [];
+    const queries: string[] = [];
+    const sql = ((strings: TemplateStringsArray) => {
+      const query = strings.join(' ');
+      queries.push(query);
+      if (query.includes('from public.partner_profiles')) return Promise.resolve([profile]);
+      return new Promise((resolve) => finish.push(() => resolve([])));
+    }) as unknown as SqlExecutor;
+    const pending = getPartnerPageData('user-id', null, ['deals', 'commissions', 'payoutMethods'], sql);
+    await vi.waitFor(() => expect(queries).toHaveLength(4));
+    finish.forEach((resolve) => resolve());
+    await pending;
+  });
+
   it('loads only the profile and lead history for the leads route', async () => {
     const { queries, sql } = createQueryRecorder();
 

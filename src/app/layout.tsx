@@ -5,6 +5,9 @@ import { Providers } from '@/providers/providers';
 import { GoogleAdsProvider } from '@/components/program/google-ads-provider';
 import './globals.css';
 
+// Guardrail only; database operations have their own shorter deadline.
+export const maxDuration = 60;
+
 export const metadata: Metadata = {
   title: {
     default: 'Nom Partner Program',

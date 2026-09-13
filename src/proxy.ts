@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { readSupabaseAuthEnv } from '@/lib/supabase/env';
 import { getGoogleSessionUser } from '@/lib/supabase/google-session';
+import { serverAuthFetch } from '@/lib/supabase/server-fetch';
 
 const PROTECTED_PREFIXES = ['/partner', '/admin'];
 const AUTH_ROUTES = ['/login'];
@@ -38,6 +39,7 @@ export async function proxy(request: NextRequest) {
   }
 
   const supabase = createServerClient(url, anonKey, {
+    global: { fetch: serverAuthFetch },
     cookies: {
       getAll() {
         return request.cookies.getAll();

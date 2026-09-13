@@ -4,12 +4,12 @@ import { ConfigRequired } from '@/components/program/config-required';
 import { EmptyState } from '@/components/program/empty-state';
 import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
-import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/program/submit-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
-import { getAdminDashboard } from '@/lib/partner-program/data';
+import { getAdminPageData } from '@/lib/partner-program/data';
 import { partnerTypeLabels } from '@/lib/partner-program/labels';
 import { requirePartnerAdmin } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
@@ -17,7 +17,7 @@ import { isSupabaseConfigError } from '@/lib/supabase/env';
 export default async function AdminPartnersPage() {
   try {
     await requirePartnerAdmin('/admin/partners');
-    const dashboard = await getAdminDashboard();
+    const dashboard = await getAdminPageData(['applications']);
 
     return (
       <div>
@@ -99,7 +99,7 @@ export default async function AdminPartnersPage() {
                   <option value="rejected">Reject</option>
                 </NativeSelect></div>
                 <div className="grid gap-2"><Label htmlFor={`application-note-${application.id}`}>Review note</Label><Input id={`application-note-${application.id}`} name="note" defaultValue={application.review_note ?? ''} /></div>
-                <Button type="submit">Save review</Button>
+                <SubmitButton pendingLabel="Saving review…">Save review</SubmitButton>
               </form>
             </div>
           ))}

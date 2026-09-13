@@ -3,14 +3,14 @@ import { EmptyState } from '@/components/program/empty-state';
 import { PageHeader } from '@/components/program/page-header';
 import { StatusBadge } from '@/components/program/status-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getAdminDashboard } from '@/lib/partner-program/data';
+import { getAdminPageData } from '@/lib/partner-program/data';
 import { requirePartnerAdmin } from '@/lib/supabase/auth';
 import { isSupabaseConfigError } from '@/lib/supabase/env';
 
 export default async function AdminOnboardingPage() {
   try {
     await requirePartnerAdmin('/admin/onboarding');
-    const dashboard = await getAdminDashboard();
+    const dashboard = await getAdminPageData(['onboardingRequests', 'platformAttributions']);
 
     return (
       <div className="grid gap-6">

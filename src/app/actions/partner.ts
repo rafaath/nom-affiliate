@@ -223,7 +223,7 @@ export async function acceptReferralPartnerAgreementAction(formData: FormData) {
   revalidatePath('/partner');
   revalidatePath('/partner/agreement');
   revalidatePath('/partner/leads');
-  redirect('/partner/agreement?accepted=1');
+  redirect('/partner/leads?agreement=accepted');
 }
 
 export async function submitLeadAction(formData: FormData) {

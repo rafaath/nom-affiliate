@@ -23,7 +23,7 @@ Fill `.env.local` with the Supabase dev project values. The app intentionally sh
 Use `DATABASE_URL` for server-side table access and Supabase only for Auth:
 
 ```bash
-DATABASE_URL=postgresql://postgres:password@db.wuryzsyfytlbrysfnwtj.supabase.co:5432/postgres?sslmode=require
+DATABASE_URL=postgresql://postgres.PROJECT_REF:password@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require
 DATABASE_POOL_MAX=1
 SUPABASE_URL=https://wuryzsyfytlbrysfnwtj.supabase.co
 SUPABASE_ANON_KEY=your-supabase-anon-key
@@ -35,7 +35,11 @@ Do not expose `DATABASE_URL` to the browser. The frontend never receives it; Nex
 
 Set `DATABASE_SSL=disable` only for a local non-SSL Postgres database. Supabase-hosted databases should use SSL.
 
-Keep `DATABASE_POOL_MAX=1` for Supabase session-pooler development connections to avoid exhausting the limited session client pool.
+For Vercel, use the **Transaction pooler** URI (port `6543`) for the correct Supabase project. Preserve an application-specific runtime role where configured; do not replace it with the privileged `postgres` role shown in the generic example. The host/region in the example is illustrative. Session pooling (`5432`) is intended for persistent IPv4 clients; changing pooler modes does not fix slow queries or cross-region latency. Keep `prepare: false` for transaction pooling.
+
+Portal reads and workflow writes use one short-lived connection per operation through the shared Supabase pooler. Each has a 20-second end-to-end database deadline, transaction-local 10-second statement and 3-second lock limits, and closes on completion. Writes are never automatically retried. `DATABASE_POOL_MAX=1` remains the conservative default for standalone legacy catalog/integration helpers; it does not select the Supabase pooler mode or limit the number of Vercel instances.
+
+`vercel.json` places functions in Mumbai (`bom1`) alongside the current production database. Update this deliberately if the database region changes. Local `.env.local` values and Vercel Production environment variables are separate; changing one does not update the other.
 
 ## Login
 

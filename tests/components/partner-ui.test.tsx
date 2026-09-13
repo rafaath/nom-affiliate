@@ -26,7 +26,7 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }));
-vi.mock('next/navigation', () => ({ usePathname: mockUsePathname }));
+vi.mock('next/navigation', () => ({ usePathname: mockUsePathname, useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('@/app/actions/auth', () => ({ signOutAction: vi.fn() }));
 
 const profile: PartnerProfile = {

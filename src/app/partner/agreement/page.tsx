@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/program/empty-state';
 import { ErrorBanner } from '@/components/program/error-banner';
 import { PageHeader } from '@/components/program/page-header';
 import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/program/submit-button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getPartnerAgreementState } from '@/lib/partner-program/data';
 import { evaluatePartnerLeadAccess } from '@/lib/partner-program/lead-access';
@@ -80,7 +81,8 @@ export default async function PartnerAgreementPage({
                   </div>
                 </dl>
               ) : null}
-              <div>
+              <div className="flex flex-wrap gap-3">
+                <Button asChild><Link href="/partner/leads">Submit a restaurant lead</Link></Button>
                 <Button variant="outline" asChild>
                   <Link href="/referral-partner-agreement" target="_blank">
                     Open accepted agreement
@@ -178,7 +180,7 @@ export default async function PartnerAgreementPage({
                 </span>
               </label>
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Button type="submit">Accept and continue</Button>
+                <SubmitButton pendingLabel="Recording acceptance…">Accept and continue</SubmitButton>
                 <Button variant="outline" asChild>
                   <Link href="/referral-partner-agreement" target="_blank">
                     Open printable version

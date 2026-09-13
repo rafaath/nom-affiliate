@@ -23,7 +23,7 @@ import { isSupabaseConfigError } from '@/lib/supabase/env';
 export default async function PartnerLeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; submitted?: string; updated?: string; deleted?: string }>;
+  searchParams: Promise<{ error?: string; submitted?: string; updated?: string; deleted?: string; agreement?: string }>;
 }) {
   try {
     const params = await searchParams;
@@ -55,7 +55,9 @@ export default async function PartnerLeadsPage({
         ? 'Lead updated.'
         : params.submitted
           ? 'Lead submitted.'
-          : null;
+          : params.agreement === 'accepted'
+            ? 'Agreement accepted. You can now submit your first restaurant lead.'
+            : null;
     return (
       <div>
         <PageHeader eyebrow="Partner portal" title="Restaurant leads" description="Register genuine restaurant opportunities and track Nom’s review." />

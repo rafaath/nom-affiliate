@@ -26,6 +26,10 @@ export type LeadAccessResult =
 
 const enabledStatuses = new Set<ApplicationStatus>(LEAD_ENABLED_APPLICATION_STATUSES);
 
+export function partnerAccessStateKey(access: LeadAccessResult) {
+  return `${access.profile?.application_status ?? 'none'}:${access.allowed ? 'allowed' : access.code}`;
+}
+
 export class PartnerLeadAccessError extends Error {
   readonly code: LeadAccessErrorCode;
 

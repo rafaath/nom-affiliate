@@ -6,7 +6,7 @@ import { FormDraftPersistence } from "@/components/program/form-draft-persistenc
 import { GoogleSignInButton } from "@/components/program/google-sign-in-button";
 import { MarketingHeader } from "@/components/shell/marketing-header";
 import { MarketingFooter } from "@/components/shell/marketing-footer";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/program/submit-button";
 import {
   Card,
   CardContent,
@@ -296,9 +296,9 @@ export default async function ApplyPage({
                       </span>
                     </label>
                   </div>
-                  <Button type="submit" size="lg">
+                  <SubmitButton size="lg" pendingLabel="Submitting application…">
                     Finish application
-                  </Button>
+                  </SubmitButton>
                 </form>
                 <FormDraftPersistence
                   formId="partner-application-form"

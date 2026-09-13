@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
-import { getAdminDashboard } from '@/lib/partner-program/data';
+import { getAdminPageData } from '@/lib/partner-program/data';
 import { formatCurrency } from '@/lib/partner-program/format';
 import { commissionStatusLabels } from '@/lib/partner-program/labels';
 import { legalCommissionStatusTargets } from '@/lib/partner-program/status-machine';
@@ -19,7 +19,7 @@ import { isSupabaseConfigError } from '@/lib/supabase/env';
 export default async function AdminCommissionsPage() {
   try {
     await requirePartnerAdmin('/admin/commissions');
-    const dashboard = await getAdminDashboard();
+    const dashboard = await getAdminPageData(['commissions']);
 
     return (
       <div>

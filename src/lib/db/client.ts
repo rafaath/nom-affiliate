@@ -1,50 +1,32 @@
 import postgres from 'postgres';
 import { SupabaseConfigError } from '@/lib/supabase/env';
+import { createDatabaseClient, withDatabaseOperation } from './operation';
 
 let database: postgres.Sql | undefined;
-let partnerSchemaReady = false;
-let partnerPlatformSchemaReady = false;
+let partnerSchemaReady: Promise<void> | undefined;
+let partnerPlatformSchemaReady: Promise<void> | undefined;
 
 const partnerMigrationMessage =
   'Partner database migrations are not fully applied. Apply the base partner migration and partner migrations through supabase/migrations/20260723120000_add_referral_partner_agreement_acceptances.sql before using partner signup, portal, or admin pages.';
 const partnerPlatformMigrationMessage =
   'Partner platform integration migrations are not applied. Apply supabase/migrations/20260524090000_partner_platform_integration.sql and supabase/migrations/20260524100000_affiliate_requested_package_flow.sql after the base partner migration before using platform-native lead review, setup verification, onboarding requests, commission approval, or affiliate package selection.';
 
-function readDatabaseUrl() {
-  const databaseUrl = process.env.DATABASE_URL;
-
-  if (!databaseUrl) {
-    throw new SupabaseConfigError('Missing DATABASE_URL. Set DATABASE_URL in .env.local for server-side database access.');
-  }
-
-  return databaseUrl;
-}
-
 export function getDatabase() {
-  if (!database) {
-    const databaseUrl = readDatabaseUrl();
-    const ssl = process.env.DATABASE_SSL === 'disable' || databaseUrl.includes('sslmode=disable') ? false : 'require';
-
-    database = postgres(databaseUrl, {
-      connect_timeout: 10,
-      idle_timeout: 20,
-      max: Number(process.env.DATABASE_POOL_MAX || 1),
-      prepare: false,
-      ssl,
-    });
-  }
-
-  return database;
+  return database ??= createDatabaseClient(Number(process.env.DATABASE_POOL_MAX || 1));
 }
 
 export function toJsonValue(value: unknown): postgres.JSONValue {
   return value as postgres.JSONValue;
 }
 
-export async function assertPartnerSchemaReady() {
-  if (partnerSchemaReady) return;
+export function assertPartnerSchemaReady(): Promise<void> {
+  return partnerSchemaReady ??= withDatabaseOperation('schema.partner', checkPartnerSchema).catch((error) => {
+    partnerSchemaReady = undefined;
+    throw error;
+  });
+}
 
-  const sql = getDatabase();
+async function checkPartnerSchema(sql: SqlExecutor) {
   const rows = await sql`
     select
       to_regclass('public.partner_admins') as partner_admins,
@@ -137,15 +119,18 @@ export async function assertPartnerSchemaReady() {
     throw new SupabaseConfigError(`${partnerMigrationMessage} Missing tables: ${missingTables.join(', ') || 'unknown'}.`);
   }
 
-  partnerSchemaReady = true;
 }
 
-export async function assertPartnerPlatformSchemaReady() {
-  if (partnerPlatformSchemaReady) return;
+export function assertPartnerPlatformSchemaReady(): Promise<void> {
+  return partnerPlatformSchemaReady ??= assertPartnerSchemaReady()
+    .then(() => withDatabaseOperation('schema.platform', checkPartnerPlatformSchema))
+    .catch((error) => {
+      partnerPlatformSchemaReady = undefined;
+      throw error;
+    });
+}
 
-  await assertPartnerSchemaReady();
-
-  const sql = getDatabase();
+async function checkPartnerPlatformSchema(sql: SqlExecutor) {
   const rows = await sql`
     select
       to_regclass('public.partner_platform_onboarding_requests') as partner_platform_onboarding_requests,
@@ -205,7 +190,6 @@ export async function assertPartnerPlatformSchemaReady() {
     throw new SupabaseConfigError(`${partnerPlatformMigrationMessage} Missing objects: ${missing.join(', ') || 'unknown'}.`);
   }
 
-  partnerPlatformSchemaReady = true;
 }
 
 export function toPartnerDatabaseError(error: unknown) {

@@ -1,13 +1,13 @@
 import { unstable_noStore as noStore } from 'next/cache';
+import { withDatabaseOperation } from '@/lib/db/operation';
 import {
   assertPartnerPlatformSchemaReady,
   assertPartnerSchemaReady,
-  getDatabase,
   toJsonValue,
   toPartnerDatabaseError,
   type SqlExecutor,
 } from '@/lib/db/client';
-import { assertFeatureCodesExist, getActivePlatformPlan, getPlatformCatalog } from './platform/catalog';
+import { assertFeatureCodesExist, getActivePlatformPlan, getPlatformCatalog, PRODUCT_INTEREST_FEATURE_CODES } from './platform/catalog';
 import { buildRequestedPackageSnapshot, type PackageCommissionRule } from './platform/package';
 import { reconcileLeadAgainstPlatform, persistLeadReconciliation } from './platform/reconciliation';
 import { createReferralCode } from './referral';
@@ -204,7 +204,11 @@ async function getCurrentAgreementAcceptanceWithClient(sql: SqlExecutor, partner
   return (rows[0] as PartnerAgreementAcceptance | undefined) ?? null;
 }
 
-export async function getPartnerProfileByAuthUser(authUserId: string, sql: SqlExecutor = getDatabase()) {
+export async function getPartnerProfileByAuthUser(authUserId: string, sql?: SqlExecutor): Promise<PartnerProfile | null> {
+  if (!sql) {
+    await assertPartnerSchemaReady();
+    return withDatabaseOperation('partner.profile', (tx) => getPartnerProfileByAuthUser(authUserId, tx));
+  }
   try {
     await assertPartnerSchemaReady();
     return getPartnerProfileByAuthUserWithClient(sql, authUserId);
@@ -243,11 +247,14 @@ async function getCommissionPreviewRules(sql: SqlExecutor, partnerType?: string 
   return rows as unknown as PackageCommissionRule[];
 }
 
-export async function getPartnerSalesCatalog(authUserId: string): Promise<PartnerSalesCatalog> {
+export async function getPartnerSalesCatalog(authUserId: string, sql?: SqlExecutor): Promise<PartnerSalesCatalog> {
+  if (!sql) {
+    await assertPartnerPlatformSchemaReady();
+    return withDatabaseOperation('partner.catalog', (tx) => getPartnerSalesCatalog(authUserId, tx));
+  }
   noStore();
   try {
     await assertPartnerPlatformSchemaReady();
-    const sql = getDatabase();
     const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
     const agreementAcceptance = profile
       ? await getCurrentAgreementAcceptanceWithClient(sql, profile.id)
@@ -267,10 +274,13 @@ export async function getPartnerSalesCatalog(authUserId: string): Promise<Partne
   }
 }
 
-export async function getPartnerLeadAccess(authUserId: string): Promise<LeadAccessResult> {
+export async function getPartnerLeadAccess(authUserId: string, sql?: SqlExecutor): Promise<LeadAccessResult> {
+  if (!sql) {
+    await assertPartnerSchemaReady();
+    return withDatabaseOperation('partner.access', (tx) => getPartnerLeadAccess(authUserId, tx));
+  }
   try {
     await assertPartnerSchemaReady();
-    const sql = getDatabase();
     const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
     const agreementAcceptance = profile
       ? await getCurrentAgreementAcceptanceWithClient(sql, profile.id)
@@ -281,7 +291,11 @@ export async function getPartnerLeadAccess(authUserId: string): Promise<LeadAcce
   }
 }
 
-export async function getPartnerAgreementState(authUserId: string, sql: SqlExecutor = getDatabase()) {
+export async function getPartnerAgreementState(authUserId: string, sql?: SqlExecutor): Promise<Pick<PartnerDashboard, 'profile' | 'agreementAcceptance'>> {
+  if (!sql) {
+    await assertPartnerSchemaReady();
+    return withDatabaseOperation('partner.agreement', (tx) => getPartnerAgreementState(authUserId, tx));
+  }
   noStore();
   try {
     const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
@@ -299,8 +313,12 @@ export async function getPartnerPageData(
   authUserId: string,
   authEmail: string | null | undefined,
   sections: readonly PartnerPageDataSection[],
-  sql: SqlExecutor = getDatabase()
+  sql?: SqlExecutor
 ): Promise<PartnerDashboard> {
+  if (!sql) {
+    await assertPartnerSchemaReady();
+    return withDatabaseOperation('partner.page', (tx) => getPartnerPageData(authUserId, authEmail, sections, tx));
+  }
   noStore();
   try {
     let profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
@@ -323,11 +341,11 @@ export async function getPartnerPageData(
     }
 
     const requestedSections = new Set(sections);
-    const agreementAcceptance = requestedSections.has('agreementAcceptance')
-      ? await getCurrentAgreementAcceptanceWithClient(sql, profile.id)
+    const agreementAcceptanceQuery = requestedSections.has('agreementAcceptance')
+      ? getCurrentAgreementAcceptanceWithClient(sql, profile.id)
       : null;
 
-    const leads = requestedSections.has('leads') ? await sql`
+    const leadsQuery = requestedSections.has('leads') ? sql`
       select
         l.*,
         case
@@ -340,7 +358,7 @@ export async function getPartnerPageData(
       order by l.created_at desc
       limit 100
     ` : [];
-    const deals = requestedSections.has('deals') ? await sql`
+    const dealsQuery = requestedSections.has('deals') ? sql`
       select
         d.*,
         case
@@ -374,7 +392,7 @@ export async function getPartnerPageData(
       order by d.updated_at desc
       limit 100
     ` : [];
-    const commissions = requestedSections.has('commissions') ? await sql`
+    const commissionsQuery = requestedSections.has('commissions') ? sql`
       select
         c.*,
         case when l.id is null then null else json_build_object('restaurant_name', l.restaurant_name) end as partner_leads,
@@ -386,7 +404,7 @@ export async function getPartnerPageData(
       order by c.created_at desc
       limit 100
     ` : [];
-    const setupChecklists = requestedSections.has('setupChecklists') ? await sql`
+    const setupChecklistsQuery = requestedSections.has('setupChecklists') ? sql`
       select
         sc.*,
         case
@@ -406,20 +424,29 @@ export async function getPartnerPageData(
       order by sc.updated_at desc
       limit 50
     ` : [];
-    const payoutMethods = requestedSections.has('payoutMethods') ? await sql`
+    const payoutMethodsQuery = requestedSections.has('payoutMethods') ? sql`
       select *
       from public.partner_payout_methods
       where partner_id = ${profile.id}
       order by created_at desc
       limit 10
     ` : [];
-    const notifications = requestedSections.has('notifications') ? await sql`
+    const notificationsQuery = requestedSections.has('notifications') ? sql`
       select *
       from public.partner_notifications
       where partner_id = ${profile.id}
       order by created_at desc
       limit 30
     ` : [];
+    const [agreementAcceptance, leads, deals, commissions, setupChecklists, payoutMethods, notifications] = await Promise.all([
+      agreementAcceptanceQuery,
+      leadsQuery,
+      dealsQuery,
+      commissionsQuery,
+      setupChecklistsQuery,
+      payoutMethodsQuery,
+      notificationsQuery,
+    ]);
     return {
       profile,
       agreementAcceptance,
@@ -435,13 +462,22 @@ export async function getPartnerPageData(
   }
 }
 
-export async function getAdminDashboard(): Promise<AdminDashboard> {
+export async function getAdminPageData(
+  sections: readonly (keyof AdminDashboard)[],
+  sql?: SqlExecutor
+): Promise<AdminDashboard> {
+  if (!sql) {
+    await assertPartnerSchemaReady();
+    return withDatabaseOperation('admin.page', (tx) => getAdminPageData(sections, tx));
+  }
   noStore();
   try {
-    await assertPartnerPlatformSchemaReady();
-    const sql = getDatabase();
-    const platformCatalog = await getPlatformCatalog(sql);
-    const partners = await sql`
+    await assertPartnerSchemaReady();
+    const requestedSections = new Set(sections);
+    const platformCatalogQuery = requestedSections.has('platformCatalog')
+      ? getPlatformCatalog(sql)
+      : { plans: [], features: [], productInterestFeatureCodes: PRODUCT_INTEREST_FEATURE_CODES };
+    const partnersQuery = requestedSections.has('partners') ? sql`
       select
         p.*,
         paa.agreement_version as current_agreement_version,
@@ -457,8 +493,8 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       ) paa on true
       order by created_at desc
       limit 200
-    `;
-    const applications = await sql`
+    ` : [];
+    const applicationsQuery = requestedSections.has('applications') ? sql`
       select
         a.*,
         paa.agreement_version as current_agreement_version,
@@ -480,8 +516,8 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       ) paa on true
       order by a.submitted_at desc
       limit 200
-    `;
-    const leads = await sql`
+    ` : [];
+    const leadsQuery = requestedSections.has('leads') ? sql`
       select
         l.*,
         case
@@ -497,8 +533,8 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       left join public.subscription_plans sp on sp.id = l.requested_plan_id
       order by l.created_at desc
       limit 200
-    `;
-    const deals = await sql`
+    ` : [];
+    const dealsQuery = requestedSections.has('deals') ? sql`
       select
         d.*,
         case
@@ -517,8 +553,8 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       left join public.partner_platform_onboarding_requests req on req.id = d.onboarding_request_id
       order by d.updated_at desc
       limit 200
-    `;
-    const setupChecklists = await sql`
+    ` : [];
+    const setupChecklistsQuery = requestedSections.has('setupChecklists') ? sql`
       select
         sc.*,
         case when p.id is null then null else json_build_object('full_name', p.full_name) end as partner_profiles,
@@ -534,8 +570,8 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       ) tasks on true
       order by sc.updated_at desc
       limit 100
-    `;
-    const commissions = await sql`
+    ` : [];
+    const commissionsQuery = requestedSections.has('commissions') ? sql`
       select
         c.*,
         case when p.id is null then null else json_build_object('full_name', p.full_name) end as partner_profiles,
@@ -547,8 +583,8 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       left join public.partner_deals d on d.id = c.deal_id
       order by c.created_at desc
       limit 200
-    `;
-    const payoutMethods = await sql`
+    ` : [];
+    const payoutMethodsQuery = requestedSections.has('payoutMethods') ? sql`
       select
         pm.*,
         case
@@ -559,14 +595,14 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       left join public.partner_profiles p on p.id = pm.partner_id
       order by pm.created_at desc
       limit 100
-    `;
-    const payoutBatches = await sql`
+    ` : [];
+    const payoutBatchesQuery = requestedSections.has('payoutBatches') ? sql`
       select *
       from public.partner_payout_batches
       order by created_at desc
       limit 50
-    `;
-    const disputes = await sql`
+    ` : [];
+    const disputesQuery = requestedSections.has('disputes') ? sql`
       select
         d.*,
         case when p.id is null then null else json_build_object('full_name', p.full_name) end as partner_profiles,
@@ -576,8 +612,8 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       left join public.partner_leads l on l.id = d.lead_id
       order by d.created_at desc
       limit 100
-    `;
-    const onboardingRequests = await sql`
+    ` : [];
+    const onboardingRequestsQuery = requestedSections.has('onboardingRequests') ? sql`
       select
         req.*,
         case when p.id is null then null else json_build_object('full_name', p.full_name, 'email', p.email) end as partner_profiles,
@@ -597,8 +633,8 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       left join public.branches b on b.id = req.created_branch_id
       order by req.updated_at desc
       limit 200
-    `;
-    const platformAttributions = await sql`
+    ` : [];
+    const platformAttributionsQuery = requestedSections.has('platformAttributions') ? sql`
       select
         a.*,
         case when p.id is null then null else json_build_object('full_name', p.full_name, 'email', p.email) end as partner_profiles,
@@ -610,13 +646,29 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       left join public.branches b on b.id = a.branch_id
       order by a.created_at desc
       limit 200
-    `;
-    const verificationRules = await sql`
+    ` : [];
+    const verificationRulesQuery = requestedSections.has('verificationRules') ? sql`
       select *
       from public.partner_setup_verification_rules
       where is_active = true
       order by sort_order asc, code asc
-    `;
+    ` : [];
+
+    const [platformCatalog, partners, applications, leads, deals, setupChecklists, commissions, payoutMethods, payoutBatches, disputes, onboardingRequests, platformAttributions, verificationRules] = await Promise.all([
+      platformCatalogQuery,
+      partnersQuery,
+      applicationsQuery,
+      leadsQuery,
+      dealsQuery,
+      setupChecklistsQuery,
+      commissionsQuery,
+      payoutMethodsQuery,
+      payoutBatchesQuery,
+      disputesQuery,
+      onboardingRequestsQuery,
+      platformAttributionsQuery,
+      verificationRulesQuery,
+    ]);
 
     return {
       partners: [...partners],
@@ -665,9 +717,12 @@ export function pendingRowToApplicationInput(row: PendingPartnerApplicationRow):
   };
 }
 
-export async function savePendingPartnerApplication(input: PartnerApplicationInput) {
+export async function savePendingPartnerApplication(input: PartnerApplicationInput, sql?: SqlExecutor): Promise<void> {
+  if (!sql) {
+    await assertPartnerSchemaReady();
+    return withDatabaseOperation('partner.save-pending', (tx) => savePendingPartnerApplication(input, tx));
+  }
   await assertPartnerSchemaReady();
-  const sql = getDatabase();
 
   await sql`
     insert into public.partner_pending_applications (
@@ -757,40 +812,28 @@ export async function savePendingPartnerApplication(input: PartnerApplicationInp
 
 export async function claimPendingPartnerApplication(authUserId: string, email: string) {
   await assertPartnerSchemaReady();
-  const sql = getDatabase();
   const normalizedEmail = email.toLowerCase();
-  const rows = await sql`
+  const rows = await withDatabaseOperation('partner.pending-application', (sql) => sql`
     select *
     from public.partner_pending_applications
     where email_normalized = ${normalizedEmail}
       and status = 'awaiting_email_confirmation'
     order by updated_at desc
     limit 1
-  `;
+  `);
   const pendingApplication = rows[0] as PendingPartnerApplicationRow | undefined;
 
   if (!pendingApplication) return null;
 
-  const profile = await upsertPartnerApplication(authUserId, pendingRowToApplicationInput(pendingApplication));
-
-  await sql`
-    update public.partner_pending_applications
-    set
-      status = 'claimed',
-      auth_user_id = ${authUserId},
-      claimed_at = now(),
-      updated_at = now()
-    where email_normalized = ${normalizedEmail}
-  `;
-
-  return profile;
+  // upsertPartnerApplication claims the pending row in the same transaction
+  // as the profile/application write. Do not issue a second, separate update.
+  return upsertPartnerApplication(authUserId, pendingRowToApplicationInput(pendingApplication));
 }
 
 export async function upsertPartnerApplication(authUserId: string, input: PartnerApplicationInput) {
   await assertPartnerSchemaReady();
-  const sql = getDatabase();
 
-  return sql.begin(async (tx) => {
+  return withDatabaseOperation('upsertPartnerApplication', async (tx) => {
     const existingProfile = await getPartnerProfileForUpdate(tx, authUserId);
     if (existingProfile) {
       throw new Error('A partner application already exists for this account. Open the partner portal to view its status.');
@@ -917,10 +960,9 @@ export async function upsertPartnerApplication(authUserId: string, input: Partne
 
 export async function acceptReferralPartnerAgreement(authUserId: string, acceptedEmail: string) {
   await assertPartnerSchemaReady();
-  const sql = getDatabase();
   const document = getCurrentReferralPartnerAgreementDocument();
 
-  return sql.begin(async (tx) => {
+  return withDatabaseOperation('acceptReferralPartnerAgreement', async (tx) => {
     const profile = await getPartnerProfileForUpdate(tx, authUserId);
 
     if (!profile) {
@@ -976,9 +1018,8 @@ export async function createPartnerLead(
   input: PartnerLeadInput
 ) {
   await assertPartnerPlatformSchemaReady();
-  const sql = getDatabase();
 
-  return sql.begin(async (tx) => {
+  return withDatabaseOperation('createPartnerLead', async (tx) => {
     const currentProfile = await getPartnerProfileForUpdate(tx, authUserId);
     const agreementAcceptance = currentProfile
       ? await getCurrentAgreementAcceptanceWithClient(tx, currentProfile.id)
@@ -1146,11 +1187,14 @@ async function getOwnedLeadForUpdate(sql: SqlExecutor, partnerId: string, leadId
   return assertSubmittedLeadMutation((rows[0] as PartnerLead | undefined) ?? null);
 }
 
-export async function getEditablePartnerLead(authUserId: string, leadId: string) {
+export async function getEditablePartnerLead(authUserId: string, leadId: string, sql?: SqlExecutor): Promise<PartnerLead> {
+  if (!sql) {
+    await assertPartnerPlatformSchemaReady();
+    return withDatabaseOperation('partner.editable-lead', (tx) => getEditablePartnerLead(authUserId, leadId, tx));
+  }
   noStore();
   try {
     await assertPartnerPlatformSchemaReady();
-    const sql = getDatabase();
     const profile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
     const agreementAcceptance = profile
       ? await getCurrentAgreementAcceptanceWithClient(sql, profile.id)
@@ -1177,9 +1221,8 @@ export async function updatePartnerLead(
   input: PartnerLeadInput
 ) {
   await assertPartnerPlatformSchemaReady();
-  const sql = getDatabase();
 
-  return sql.begin(async (tx) => {
+  return withDatabaseOperation('updatePartnerLead', async (tx) => {
     const currentProfile = await getPartnerProfileForUpdate(tx, authUserId);
     const agreementAcceptance = currentProfile
       ? await getCurrentAgreementAcceptanceWithClient(tx, currentProfile.id)
@@ -1270,9 +1313,8 @@ export async function updatePartnerLead(
 
 export async function deletePartnerLead(authUserId: string, leadId: string) {
   await assertPartnerPlatformSchemaReady();
-  const sql = getDatabase();
 
-  return sql.begin(async (tx) => {
+  return withDatabaseOperation('deletePartnerLead', async (tx) => {
     const currentProfile = await getPartnerProfileForUpdate(tx, authUserId);
     const agreementAcceptance = currentProfile
       ? await getCurrentAgreementAcceptanceWithClient(tx, currentProfile.id)
@@ -1292,9 +1334,12 @@ export async function deletePartnerLead(authUserId: string, leadId: string) {
   });
 }
 
-export async function savePartnerPayoutMethod(authUserId: string, input: PartnerPayoutMethodInput) {
+export async function savePartnerPayoutMethod(authUserId: string, input: PartnerPayoutMethodInput, sql?: SqlExecutor): Promise<void> {
+  if (!sql) {
+    await assertPartnerSchemaReady();
+    return withDatabaseOperation('partner.payout-method', (tx) => savePartnerPayoutMethod(authUserId, input, tx));
+  }
   await assertPartnerSchemaReady();
-  const sql = getDatabase();
   const currentProfile = await getPartnerProfileByAuthUserWithClient(sql, authUserId);
   const agreementAcceptance = currentProfile
     ? await getCurrentAgreementAcceptanceWithClient(sql, currentProfile.id)
@@ -1329,9 +1374,12 @@ export async function savePartnerPayoutMethod(authUserId: string, input: Partner
   `;
 }
 
-export async function ensureDefaultResources() {
+export async function ensureDefaultResources(sql?: SqlExecutor): Promise<void> {
+  if (!sql) {
+    await assertPartnerSchemaReady();
+    return withDatabaseOperation('partner.resources', (tx) => ensureDefaultResources(tx));
+  }
   await assertPartnerSchemaReady();
-  const sql = getDatabase();
 
   for (const [index, resource] of defaultPartnerResources.entries()) {
     await sql`

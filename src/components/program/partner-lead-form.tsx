@@ -1,5 +1,5 @@
 import type { InputHTMLAttributes } from 'react';
-import { Button } from '@/components/ui/button';
+import { SubmitButton } from '@/components/program/submit-button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -127,7 +127,7 @@ export function PartnerLeadForm({ action, lead, submitLabel }: PartnerLeadFormPr
       <p className="rounded-xl bg-muted p-3 text-sm text-muted-foreground">
         Fake, duplicate, scraped, or unsupported leads may be rejected and can affect partner quality.
       </p>
-      <Button type="submit">{submitLabel}</Button>
+      <SubmitButton pendingLabel="Saving lead…">{submitLabel}</SubmitButton>
     </form>
   );
 }

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
-import { getAdminDashboard } from '@/lib/partner-program/data';
+import { getAdminPageData } from '@/lib/partner-program/data';
 import { setupStatusLabels } from '@/lib/partner-program/labels';
 import { legalSetupStatusTargets } from '@/lib/partner-program/status-machine';
 import type { SetupStatus } from '@/lib/partner-program/types';
@@ -18,7 +18,7 @@ import { isSupabaseConfigError } from '@/lib/supabase/env';
 export default async function AdminSetupPage() {
   try {
     await requirePartnerAdmin('/admin/setup');
-    const dashboard = await getAdminDashboard();
+    const dashboard = await getAdminPageData(['setupChecklists']);
 
     return (
       <div className="grid gap-4">
