@@ -121,6 +121,10 @@ const faqs = [
     question: 'How do I earn?',
     answer: 'Your portal shows the current reward and what must happen before each opportunity earns it.',
   },
+  {
+    question: 'How much can I earn as an affiliate in India?',
+    answer: 'Affiliates in India earn a one-time 25% commission on each converted branch’s first paid annual subscription invoice. Our annual software packages typically cost ₹4,000–₹16,000 per branch, giving you ₹1,000–₹4,000 for each eligible converted branch. For example, a ₹10,000 first-year subscription means ₹2,500 in commission. This is not a monthly or renewal payment; payment validation, approval, and program terms apply.',
+  },
 ];
 
 export default async function HomePage() {
@@ -138,10 +142,10 @@ export default async function HomePage() {
             <div className="lg:col-span-6">
               <p className="marketing-eyebrow text-lilac">Nom partner program</p>
               <h1 className="marketing-display mt-7 max-w-[10ch] text-lilac">
-                Find restaurants. Earn with Nom.
+                Refer restaurants. Earn 25% with Nom.
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-8 text-paper/75">
-                Use LinkedIn, local research, or your own network to find interested restaurants. Refer them to Nom and earn when eligible referrals succeed.
+                Use LinkedIn, local research, or your own network to find interested restaurants. Earn a one-time commission on each converted branch’s first paid annual subscription invoice. Eligibility and terms apply.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Button className="bg-lilac text-plum hover:bg-white" size="lg" asChild>

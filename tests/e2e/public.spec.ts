@@ -5,7 +5,7 @@ test("public landing presents the approval-gated partner flow", async ({
 }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /Find restaurants/i }),
+    page.getByRole("heading", { name: "Refer restaurants. Earn 25% with Nom." }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Apply to partner/i }),
