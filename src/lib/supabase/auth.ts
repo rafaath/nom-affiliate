@@ -7,6 +7,7 @@ import { getGoogleSessionUser } from './google-session';
 export type CurrentUser = {
   id: string;
   email: string | null;
+  fullName?: string | null;
 };
 
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
@@ -20,6 +21,9 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   return {
     id: user.id,
     email: user.email ?? null,
+    fullName: typeof user.user_metadata?.full_name === 'string'
+      ? user.user_metadata.full_name
+      : typeof user.user_metadata?.name === 'string' ? user.user_metadata.name : null,
   };
 });
 

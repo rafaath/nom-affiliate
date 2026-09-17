@@ -101,6 +101,7 @@ export default async function PartnerDashboardPage() {
             <CardContent className="grid gap-3 sm:grid-cols-2">
               {leadAccess.allowed ? <Button asChild><Link href={nextStep?.href ?? '/partner/leads'}>{nextStep?.actionLabel ?? 'Register restaurant lead'}</Link></Button> : null}
               <Button variant="outline" asChild><Link href="/partner/resources">Open sales kit</Link></Button>
+              <Button variant="outline" asChild><Link href="/partner/profile">Add profile details (optional)</Link></Button>
               {dashboard.setupChecklists.length > 0 ? (
                 <Button variant="outline" asChild><Link href="/partner/setup">View restaurant setup</Link></Button>
               ) : null}

@@ -2,6 +2,7 @@ import { PortalShell } from '@/components/shell/portal-shell';
 
 const partnerNav = [
   { href: '/partner', label: 'Dashboard' },
+  { href: '/partner/profile', label: 'Profile' },
   { href: '/partner/agreement', label: 'Agreement' },
   { href: '/partner/leads', label: 'Leads' },
   { href: '/partner/deals', label: 'Deals' },

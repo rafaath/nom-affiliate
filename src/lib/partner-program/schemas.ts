@@ -31,24 +31,31 @@ function optionalProfileUrl(hostnames: readonly string[], message: string, allow
     .optional();
 }
 
-export const partnerApplicationSchema = z.object({
+// Secondary details can be added in the portal. Empty answers use the existing
+// storage defaults; they must not be treated as verified applicant qualifications.
+export const partnerApplicationDetailsSchema = z.object({
+  localityAreas: z.array(z.string().trim().min(1)).default([]),
+  partnerType: z.enum(PARTNER_TYPES).default('affiliate'),
+  restaurantExperience: z.string().trim().max(1200).default(''),
+  restaurantNetworkSize: z.coerce.number().int().min(0).max(100_000).default(0),
+  canVisitRestaurants: z.boolean().default(false),
+  canHelpSetup: z.boolean().default(false),
+  applicantKind: z.enum(['individual', 'company']).default('individual'),
+  businessName: z.string().trim().max(160).optional(),
+  linkedinProfileUrl: optionalProfileUrl(['linkedin.com'], 'Enter a valid LinkedIn profile URL.', true),
+  resumeDriveUrl: optionalProfileUrl(['drive.google.com', 'docs.google.com'], 'Enter a valid Google Drive or Google Docs URL.'),
+  background: z.string().trim().max(1200).default(''),
+  preferredLanguage: z.string().trim().max(80).default(''),
+  heardFrom: z.string().trim().max(160).default(''),
+});
+
+export type PartnerApplicationDetailsInput = z.infer<typeof partnerApplicationDetailsSchema>;
+
+export const partnerApplicationSchema = partnerApplicationDetailsSchema.extend({
   fullName: requiredText.max(120),
   phone: requiredText.max(40),
   email: z.string().trim().email(),
   city: requiredText.max(80),
-  localityAreas: z.array(z.string().trim().min(1)).min(1),
-  partnerType: z.enum(PARTNER_TYPES),
-  restaurantExperience: requiredText.max(1200),
-  restaurantNetworkSize: z.coerce.number().int().min(0).max(100_000),
-  canVisitRestaurants: z.coerce.boolean(),
-  canHelpSetup: z.coerce.boolean(),
-  applicantKind: z.enum(['individual', 'company']),
-  businessName: z.string().trim().max(160).optional(),
-  linkedinProfileUrl: optionalProfileUrl(['linkedin.com'], 'Enter a valid LinkedIn profile URL.', true),
-  resumeDriveUrl: optionalProfileUrl(['drive.google.com', 'docs.google.com'], 'Enter a valid Google Drive or Google Docs URL.'),
-  background: requiredText.max(1200),
-  preferredLanguage: requiredText.max(80),
-  heardFrom: requiredText.max(160),
   applicationTermsVersion: z.literal(APPLICATION_TERMS_VERSION, {
     error: 'Refresh this page and accept the current application terms.',
   }),

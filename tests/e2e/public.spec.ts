@@ -26,7 +26,7 @@ test("application requires Google verification before showing the application fo
   await page.goto("/apply");
   await expect(
     page.getByRole("heading", {
-      name: /Tell us how you can help restaurants succeed/i,
+      name: /Your next introduction could pay off/i,
     }),
   ).toBeVisible();
   await expect(
@@ -38,6 +38,17 @@ test("application requires Google verification before showing the application fo
       name: /accept the Partner Application Terms/i,
     }),
   ).toHaveCount(0);
+});
+
+test('Google sign-in is above the fold on a small mobile screen', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.goto('/apply');
+  const button = page.getByRole('button', { name: /Sign in with Google to apply/i });
+  await expect(button).toBeVisible();
+  const bounds = await button.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(640);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
 });
 
 test("there is no public waitlist route or copy", async ({ page }) => {

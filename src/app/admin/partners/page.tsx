@@ -25,7 +25,7 @@ export default async function AdminPartnersPage() {
       <Card>
         <CardHeader>
           <CardTitle>Partner application review</CardTitle>
-          <CardDescription>Approve, reject, request info, or schedule interview.</CardDescription>
+          <CardDescription>Approve, reject, request info, or schedule interview. Applicants can add optional background details later; blank answers and default selections are not verified qualifications.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           {dashboard.applications.map((application) => (
@@ -36,7 +36,7 @@ export default async function AdminPartnersPage() {
                   <div className="text-sm text-muted-foreground">
                     {application.city} · {partnerTypeLabels[application.requested_partner_type as keyof typeof partnerTypeLabels]}
                   </div>
-                  <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{application.restaurant_experience}</p>
+                  <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{application.restaurant_experience || 'Restaurant experience not provided (optional).'}</p>
                   <p className="mt-2 font-mono text-xs text-muted-foreground">
                     {application.program_terms_version && application.program_terms_accepted_at
                       ? `Terms ${application.program_terms_version} · accepted ${new Date(application.program_terms_accepted_at).toLocaleString('en-IN')}`
@@ -59,9 +59,9 @@ export default async function AdminPartnersPage() {
                   },
                   { label: 'Applicant type', value: application.applicant_kind === 'company' ? 'Company / agency' : 'Individual' },
                   { label: 'Business / agency', value: application.business_name },
-                  { label: 'Existing restaurant contacts', value: application.restaurant_network_size },
-                  { label: 'Can visit restaurants', value: formatBoolean(application.can_visit_restaurants) },
-                  { label: 'Can help with setup', value: formatBoolean(application.can_help_setup) },
+                  { label: 'Restaurant contacts declared', value: application.restaurant_network_size || 'None declared' },
+                  { label: 'Restaurant visits offered', value: formatBoolean(application.can_visit_restaurants) },
+                  { label: 'Setup help offered', value: formatBoolean(application.can_help_setup) },
                   { label: 'Preferred language', value: application.preferred_language },
                   { label: 'How they heard about Nom', value: application.heard_from },
                   {
@@ -119,7 +119,7 @@ function ExternalLink({ href, children }: { href: string; children: React.ReactN
 }
 
 function formatBoolean(value: boolean | null | undefined) {
-  return value ? 'Yes' : 'No';
+  return value ? 'Yes' : 'Not indicated';
 }
 
 function formatDate(value: string | null | undefined) {

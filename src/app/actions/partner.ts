@@ -9,6 +9,7 @@ import {
   createPartnerLead,
   deletePartnerLead,
   getPartnerProfileByAuthUser,
+  savePartnerApplicationDetails,
   savePartnerPayoutMethod,
   updatePartnerLead,
   upsertPartnerApplication,
@@ -20,6 +21,7 @@ import {
   parseProductInterests,
   parseRequestedFeatureCodes,
   partnerApplicationSchema,
+  partnerApplicationDetailsSchema,
   partnerLeadIdSchema,
   partnerLeadSchema,
   payoutMethodSchema,
@@ -50,6 +52,24 @@ function applicationErrorRedirect(message: string): never {
 
 function logApplicationIssue(message: string, details: Record<string, unknown>) {
   console.error('[partner-application]', message, details);
+}
+
+function applicationDetailsFromForm(formData: FormData) {
+  return {
+    localityAreas: stringListFromForm(formData, 'localityAreas'),
+    partnerType: formData.has('partnerType') ? parsePartnerType(formData.get('partnerType')) : undefined,
+    restaurantExperience: formData.get('restaurantExperience') ?? undefined,
+    restaurantNetworkSize: formData.get('restaurantNetworkSize') ?? undefined,
+    canVisitRestaurants: booleanFromForm(formData.get('canVisitRestaurants')),
+    canHelpSetup: booleanFromForm(formData.get('canHelpSetup')),
+    applicantKind: formData.get('applicantKind') ?? undefined,
+    businessName: String(formData.get('businessName') || '').trim() || undefined,
+    linkedinProfileUrl: String(formData.get('linkedinProfileUrl') || '').trim() || undefined,
+    resumeDriveUrl: String(formData.get('resumeDriveUrl') || '').trim() || undefined,
+    background: formData.get('background') ?? undefined,
+    preferredLanguage: formData.get('preferredLanguage') ?? undefined,
+    heardFrom: formData.get('heardFrom') ?? undefined,
+  };
 }
 
 function parsePartnerLeadFormData(formData: FormData) {
@@ -128,23 +148,11 @@ export async function submitApplicationAction(formData: FormData) {
   }
 
   const parsed = partnerApplicationSchema.safeParse({
+    ...applicationDetailsFromForm(formData),
     fullName: formData.get('fullName'),
     phone: formData.get('phone'),
     email,
     city: formData.get('city'),
-    localityAreas: stringListFromForm(formData, 'localityAreas'),
-    partnerType: parsePartnerType(formData.get('partnerType')),
-    restaurantExperience: formData.get('restaurantExperience'),
-    restaurantNetworkSize: formData.get('restaurantNetworkSize'),
-    canVisitRestaurants: booleanFromForm(formData.get('canVisitRestaurants')),
-    canHelpSetup: booleanFromForm(formData.get('canHelpSetup')),
-    applicantKind: formData.get('applicantKind'),
-    businessName: String(formData.get('businessName') || '').trim() || undefined,
-    linkedinProfileUrl: String(formData.get('linkedinProfileUrl') || '').trim() || undefined,
-    resumeDriveUrl: String(formData.get('resumeDriveUrl') || '').trim() || undefined,
-    background: formData.get('background'),
-    preferredLanguage: formData.get('preferredLanguage'),
-    heardFrom: formData.get('heardFrom'),
     applicationTermsVersion: formData.get('applicationTermsVersion'),
     applicationTermsAccepted: booleanFromForm(formData.get('applicationTermsAccepted')),
   });
@@ -198,6 +206,30 @@ export async function submitApplicationAction(formData: FormData) {
   await recordApplicationReceipt(savedProfile.id, currentUser.id);
   revalidatePath('/partner');
   redirect('/partner?applied=1');
+}
+
+export async function saveApplicationDetailsAction(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user?.email) redirect('/login?notice=google-only&returnTo=%2Fpartner%2Fprofile');
+
+  const parsed = partnerApplicationDetailsSchema.safeParse(applicationDetailsFromForm(formData));
+  if (!parsed.success) {
+    redirect(`/partner/profile?error=${encodeURIComponent(parsed.error.issues[0]?.message || 'Check your profile details.')}`);
+  }
+
+  try {
+    await savePartnerApplicationDetails(user.id, parsed.data);
+  } catch (error) {
+    console.error('[partner-profile] Profile details save failed', {
+      authUserId: user.id,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    redirect('/partner/profile?error=Your%20details%20could%20not%20be%20saved.%20Please%20try%20again.');
+  }
+
+  revalidatePath('/partner/profile');
+  revalidatePath('/admin/partners');
+  redirect('/partner/profile?saved=1');
 }
 
 export async function acceptReferralPartnerAgreementAction(formData: FormData) {

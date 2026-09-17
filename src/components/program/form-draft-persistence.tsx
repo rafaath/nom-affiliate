@@ -25,10 +25,9 @@ export function FormDraftPersistence({
     if (clearOnSuccess && !hasError && sessionStorage.getItem(submittedKey) === '1') {
       sessionStorage.removeItem(storageKey);
       sessionStorage.removeItem(submittedKey);
-      return;
+    } else {
+      restoreDraft(form, storageKey);
     }
-
-    restoreDraft(form, storageKey);
 
     const save = () => saveDraft(form, storageKey);
     const onSubmit = () => {

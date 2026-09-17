@@ -16,6 +16,7 @@ import { assertPartnerLeadAccess, evaluatePartnerLeadAccess, type LeadAccessResu
 import { getCurrentReferralPartnerAgreementDocument } from './referral-agreement.server';
 import { REFERRAL_PARTNER_AGREEMENT_VERSION } from './referral-agreement';
 import { canPartnerModifyLead } from './status-machine';
+import type { PartnerApplicationDetailsInput } from './schemas';
 import {
   LEAD_ENABLED_APPLICATION_STATUSES,
   type PartnerAgreementAcceptance,
@@ -828,6 +829,58 @@ export async function claimPendingPartnerApplication(authUserId: string, email: 
   // upsertPartnerApplication claims the pending row in the same transaction
   // as the profile/application write. Do not issue a second, separate update.
   return upsertPartnerApplication(authUserId, pendingRowToApplicationInput(pendingApplication));
+}
+
+export async function getPartnerApplicationDetails(authUserId: string): Promise<PendingPartnerApplicationRow | null> {
+  noStore();
+  await assertPartnerSchemaReady();
+  return withDatabaseOperation('partner.application-details', async (sql) => {
+    const rows = await sql`
+      select a.*
+      from public.partner_applications a
+      join public.partner_profiles p on p.id = a.partner_id
+      where a.auth_user_id = ${authUserId} and p.auth_user_id = ${authUserId}
+      limit 1
+    `;
+    return (rows[0] as PendingPartnerApplicationRow | undefined) ?? null;
+  });
+}
+
+export async function savePartnerApplicationDetails(authUserId: string, input: PartnerApplicationDetailsInput) {
+  await assertPartnerSchemaReady();
+  return withDatabaseOperation('partner.save-application-details', async (sql) => {
+    // Resolve ownership from the session, never from a posted partner/application ID.
+    const profile = await getPartnerProfileForUpdate(sql, authUserId);
+    if (!profile) throw new Error('Submit your partner application first.');
+
+    // Only self-reported details change. Approval, assigned partner type/tier,
+    // agreements, terms acceptance, and the original submission are untouched.
+    const rows = await sql`
+      update public.partner_applications set
+        locality_areas = ${input.localityAreas},
+        requested_partner_type = ${input.partnerType},
+        restaurant_experience = ${input.restaurantExperience},
+        restaurant_network_size = ${input.restaurantNetworkSize},
+        can_visit_restaurants = ${input.canVisitRestaurants},
+        can_help_setup = ${input.canHelpSetup},
+        applicant_kind = ${input.applicantKind},
+        business_name = ${input.businessName || null},
+        linkedin_profile_url = ${input.linkedinProfileUrl || null},
+        resume_drive_url = ${input.resumeDriveUrl || null},
+        background = ${input.background},
+        preferred_language = ${input.preferredLanguage},
+        heard_from = ${input.heardFrom},
+        updated_at = now()
+      where partner_id = ${profile.id} and auth_user_id = ${authUserId}
+      returning id
+    `;
+    if (!rows[0]) throw new Error('Partner application not found.');
+
+    await sql`
+      update public.partner_profiles set locality_areas = ${input.localityAreas}, updated_at = now()
+      where id = ${profile.id} and auth_user_id = ${authUserId}
+    `;
+  });
 }
 
 export async function upsertPartnerApplication(authUserId: string, input: PartnerApplicationInput) {

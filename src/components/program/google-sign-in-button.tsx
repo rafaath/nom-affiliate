@@ -1,5 +1,5 @@
 import { signInWithGoogleAction } from "@/app/actions/auth";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/program/submit-button";
 
 export function GoogleSignInButton({
   returnTo,
@@ -11,12 +11,12 @@ export function GoogleSignInButton({
   return (
     <form action={signInWithGoogleAction}>
       <input type="hidden" name="returnTo" value={returnTo} />
-      <Button className="w-full" type="submit" variant="outline">
+      <SubmitButton className="w-full" variant="outline" pendingLabel="Opening Google…">
         <span aria-hidden="true" className="font-display text-base">
           G
         </span>
         {label}
-      </Button>
+      </SubmitButton>
     </form>
   );
 }
